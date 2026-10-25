@@ -50,6 +50,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.foundation.Canvas
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -57,7 +60,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ipsuman.sensoractivatedtimer.TimerNotificationHelper
 import com.ipsuman.sensoractivatedtimer.sensor.ProximitySensorController
-import com.ipsuman.sensoractivatedtimer.sensor.AccelerometerController
 import com.ipsuman.sensoractivatedtimer.sensor.AccelerometerController
 import com.ipsuman.sensoractivatedtimer.sensor.MicrophoneTapController
 import com.ipsuman.sensoractivatedtimer.sensor.MicrophoneTriggerMode
@@ -76,7 +78,7 @@ private enum class ProximityTarget(val label: String) {
     TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")
 }
 
-private enum class AccelerometerTarget(val label: String) {\n    TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")\n}\n\nprivate enum class AccelerometerTarget(val label: String) {
+private enum class AccelerometerTarget(val label: String) {
     TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")
 }
 
@@ -100,6 +102,10 @@ fun ClockApp() {
     var stopwatchRunning by remember { mutableStateOf(false) }
     var stopwatchMillis by remember { mutableLongStateOf(0L) }
     var proximityAvailable by remember { mutableStateOf(true) }
+    var proximityDistanceCm by remember { mutableStateOf<Float?>(null) }
+    var microphoneLevel by remember { mutableStateOf(0f) }
+    var microphonePitchHz by remember { mutableIntStateOf(0) }
+    var microphoneHistory by remember { mutableStateOf<List<Float>>(emptyList()) }
     var proximityEnabled by remember { mutableStateOf(true) }
     var proximityTarget by remember { mutableStateOf(ProximityTarget.TIMER) }
     var accelerometerAvailable by remember { mutableStateOf(true) }
@@ -193,25 +199,6 @@ fun ClockApp() {
         }
     })
 
-    val latestAccelerometerAction by rememberUpdatedState<() -> Unit>({
-        when (accelerometerTarget) {
-            AccelerometerTarget.TIMER -> {
-                if (timerRunning) timerRunning = false else {
-                    if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
-                    timerRunning = remainingSeconds > 0
-                }
-            }
-            AccelerometerTarget.STOPWATCH -> stopwatchRunning = !stopwatchRunning
-            AccelerometerTarget.BOTH -> {
-                if (timerRunning) timerRunning = false else {
-                    if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
-                    timerRunning = remainingSeconds > 0
-                }
-                stopwatchRunning = !stopwatchRunning
-            }
-        }
-    })
-
     val latestMicrophoneAction by rememberUpdatedState<() -> Unit>({
         when (microphoneTarget) {
             MicrophoneTarget.TIMER -> {
@@ -238,7 +225,8 @@ fun ClockApp() {
             val controller = ProximitySensorController(
                 context = context,
                 onCovered = { latestProximityAction() },
-                onAvailabilityChanged = { proximityAvailable = it }
+                onAvailabilityChanged = { proximityAvailable = it },
+                onDistanceChanged = { proximityDistanceCm = it }
             )
             controller.start()
             onDispose { controller.stop() }
@@ -248,23 +236,6 @@ fun ClockApp() {
     DisposableEffect(context, accelerometerEnabled, accelerometerSensitivity) {
         if (!accelerometerEnabled) {
             accelerometerAvailable = (context.getSystemService(android.content.Context.SENSOR_SERVICE) as android.hardware.SensorManager)
-                .getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER) != null
-            onDispose { }
-        } else {
-            val controller = AccelerometerController(
-                context = context,
-                sensitivity = accelerometerSensitivity,
-                onShake = { latestAccelerometerAction() },
-                onAvailabilityChanged = { accelerometerAvailable = it }
-            )
-            controller.start()
-            onDispose { controller.stop() }
-        }
-    }
-
-    DisposableEffect(context, accelerometerEnabled, accelerometerSensitivity) {
-        if (!accelerometerEnabled) {
-            accelerometerAvailable = (context.getSystemService(Context.SENSOR_SERVICE) as android.hardware.SensorManager)
                 .getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER) != null
             onDispose { }
         } else {
@@ -292,6 +263,11 @@ fun ClockApp() {
                 initialReferenceDurationMs = referenceDurationMs,
                 intensityTolerancePercent = intensityTolerance,
                 durationTolerancePercent = durationTolerance,
+                onAudioMetrics = { intensity, pitchHz ->
+                    microphoneLevel = intensity.toFloat()
+                    microphonePitchHz = pitchHz
+                    microphoneHistory = (microphoneHistory + intensity.toFloat()).takeLast(48)
+                },
                 onReferenceSoundChanged = { intensity, durationMs ->
                     referenceIntensity = intensity
                     referenceDurationMs = durationMs
@@ -405,7 +381,9 @@ fun ClockApp() {
                     verticalArrangement = Arrangement.Top
                 ) {
                     when (selectedTab) {
-                        AppTab.TIMER -> TimerScreen(
+                        AppTab.TIMER -> Column {
+                            SensorStatusPanel(microphoneEnabled && microphonePermissionGranted, microphoneHistory, microphoneLevel, microphonePitchHz, proximityEnabled && proximityAvailable, proximityDistanceCm, accelerometerEnabled && accelerometerAvailable)
+                            TimerScreen(
                             durationInput = durationInput,
                             onDurationChange = { durationInput = it.filter(Char::isDigit).take(5) },
                             remainingSeconds = remainingSeconds,
@@ -421,13 +399,17 @@ fun ClockApp() {
                             },
                             onPause = { timerRunning = false },
                             onReset = { timerRunning = false; remainingSeconds = 0 }
-                        )
-                        AppTab.STOPWATCH -> StopwatchScreen(
+                            )
+                        }
+                        AppTab.STOPWATCH -> Column {
+                            SensorStatusPanel(microphoneEnabled && microphonePermissionGranted, microphoneHistory, microphoneLevel, microphonePitchHz, proximityEnabled && proximityAvailable, proximityDistanceCm, accelerometerEnabled && accelerometerAvailable)
+                            StopwatchScreen(
                             elapsedMillis = stopwatchMillis,
                             running = stopwatchRunning,
                             onToggle = { stopwatchRunning = !stopwatchRunning },
                             onReset = { stopwatchRunning = false; stopwatchMillis = 0L }
-                        )
+                            )
+                        }
                         AppTab.SETTINGS -> SettingsScreen(
                             proximityEnabled = proximityEnabled,
                             onProximityChanged = { proximityEnabled = it },
@@ -509,6 +491,69 @@ fun ClockApp() {
     }
 }
 
+@Composable
+private fun SensorStatusPanel(
+    microphoneActive: Boolean,
+    microphoneHistory: List<Float>,
+    microphoneLevel: Float,
+    microphonePitchHz: Int,
+    proximityActive: Boolean,
+    proximityDistanceCm: Float?,
+    accelerometerActive: Boolean
+) {
+    if (!microphoneActive && !proximityActive && !accelerometerActive) return
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            if (microphoneActive) {
+                Text("🎙 Microphone intensity", fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Text("Current pitch: ${if (microphonePitchHz > 0) "$microphonePitchHz Hz" else "— Hz"}")
+                Text("Intensity (RMS): ${microphoneLevel.toInt()}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(8.dp))
+                Canvas(Modifier.fillMaxWidth().height(120.dp)) {
+                    val values = microphoneHistory
+                    val left = 8f
+                    val right = size.width - 8f
+                    val top = 8f
+                    val bottom = size.height - 22f
+                    val graphHeight = bottom - top
+                    val graphWidth = right - left
+                    drawLine(MaterialTheme.colorScheme.outline, Offset(left, top), Offset(left, bottom), strokeWidth = 1.dp.toPx())
+                    drawLine(MaterialTheme.colorScheme.outline, Offset(left, bottom), Offset(right, bottom), strokeWidth = 1.dp.toPx())
+                    if (values.size > 1) {
+                        val maxValue = maxOf(values.maxOrNull() ?: 1f, 1f)
+                        val path = Path()
+                        values.forEachIndexed { index, value ->
+                            val x = left + graphWidth * index / (values.size - 1).toFloat()
+                            val y = bottom - (value / maxValue).coerceIn(0f, 1f) * graphHeight
+                            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                        }
+                        drawPath(path, color = MaterialTheme.colorScheme.primary, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+                    }
+                    drawContext.canvas.nativeCanvas.apply {
+                        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                            color = android.graphics.Color.GRAY
+                            textSize = 10.sp.toPx()
+                        }
+                        drawText("Intensity", left, 10f, paint)
+                        drawText("Time →", right - 42f, size.height - 4f, paint)
+                    }
+                }
+                Text("Legend: current pitch in Hz • X axis: time • Y axis: intensity", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(12.dp))
+            }
+            if (proximityActive) {
+                Text("Proximity distance: ${proximityDistanceCm?.let { "%.1f cm".format(it) } ?: "Reading sensor…"}", fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+            }
+            if (accelerometerActive) Text("Accelerometer is being used", fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
 @Composable
 private fun TimerScreen(
     durationInput: String,
