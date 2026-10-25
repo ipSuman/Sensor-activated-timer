@@ -1,5 +1,10 @@
 package com.ipsuman.sensoractivatedtimer.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -45,6 +50,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ipsuman.sensoractivatedtimer.sensor.ProximitySensorController
+import com.ipsuman.sensoractivatedtimer.sensor.MicrophoneTapController
 import kotlinx.coroutines.delay
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -60,8 +66,13 @@ private enum class ProximityTarget(val label: String) {
     TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")
 }
 
+private enum class MicrophoneTarget(val label: String) {
+    TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")
+}
+
 @Composable
 fun ClockApp() {
+    val context = LocalContext.current
     var selectedTab by remember { mutableStateOf(AppTab.TIMER) }
     var currentTime by remember { mutableStateOf(LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"))) }
     var durationInput by remember { mutableStateOf("60") }
@@ -72,6 +83,25 @@ fun ClockApp() {
     var proximityAvailable by remember { mutableStateOf(true) }
     var proximityEnabled by remember { mutableStateOf(true) }
     var proximityTarget by remember { mutableStateOf(ProximityTarget.TIMER) }
+    var microphoneEnabled by remember { mutableStateOf(false) }
+    var microphonePermissionGranted by remember {
+        mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+    }
+    var microphoneTarget by remember { mutableStateOf(MicrophoneTarget.TIMER) }
+    var microphoneError by remember { mutableStateOf<String?>(null) }
+
+    val microphonePermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        microphonePermissionGranted = granted
+        if (granted) {
+            microphoneError = null
+            microphoneEnabled = true
+        } else {
+            microphoneEnabled = false
+            microphoneError = "Microphone permission was denied. Allow it in Android app permissions to use this trigger."
+        }
+    }
 
     // Covering the sensor toggles the selected clock: running clocks pause, paused clocks resume.
     val latestProximityAction by rememberUpdatedState<() -> Unit>({
@@ -100,7 +130,24 @@ fun ClockApp() {
             }
         }
     })
-    val context = LocalContext.current
+    val latestMicrophoneAction by rememberUpdatedState<() -> Unit>({
+        when (microphoneTarget) {
+            MicrophoneTarget.TIMER -> {
+                if (timerRunning) timerRunning = false else {
+                    if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
+                    timerRunning = remainingSeconds > 0
+                }
+            }
+            MicrophoneTarget.STOPWATCH -> stopwatchRunning = !stopwatchRunning
+            MicrophoneTarget.BOTH -> {
+                if (timerRunning) timerRunning = false else {
+                    if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
+                    timerRunning = remainingSeconds > 0
+                }
+                stopwatchRunning = !stopwatchRunning
+            }
+        }
+    })
 
     DisposableEffect(context, proximityEnabled) {
         if (!proximityEnabled) {
@@ -110,6 +157,20 @@ fun ClockApp() {
                 context = context,
                 onCovered = { latestProximityAction() },
                 onAvailabilityChanged = { proximityAvailable = it }
+            )
+            controller.start()
+            onDispose { controller.stop() }
+        }
+    }
+
+    DisposableEffect(context, microphoneEnabled, microphonePermissionGranted) {
+        if (!microphoneEnabled || !microphonePermissionGranted) {
+            onDispose { }
+        } else {
+            val controller = MicrophoneTapController(
+                context = context,
+                onTripleTap = { latestMicrophoneAction() },
+                onError = { error -> microphoneError = error; microphoneEnabled = false }
             )
             controller.start()
             onDispose { controller.stop() }
@@ -202,7 +263,19 @@ fun ClockApp() {
                             onProximityChanged = { proximityEnabled = it },
                             proximityAvailable = proximityAvailable,
                             proximityTarget = proximityTarget,
-                            onProximityTargetChanged = { proximityTarget = it }
+                            onProximityTargetChanged = { proximityTarget = it },
+                            microphoneEnabled = microphoneEnabled,
+                            onMicrophoneChanged = { enabled ->
+                                if (enabled) {
+                                    val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                                    if (granted) { microphonePermissionGranted = true; microphoneEnabled = true }
+                                    else microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                } else { microphoneEnabled = false }
+                            },
+                            microphonePermissionGranted = microphonePermissionGranted,
+                            microphoneTarget = microphoneTarget,
+                            onMicrophoneTargetChanged = { microphoneTarget = it },
+                            microphoneError = microphoneError
                         )
                     }
                 }
@@ -292,7 +365,13 @@ private fun SettingsScreen(
     onProximityChanged: (Boolean) -> Unit,
     proximityAvailable: Boolean,
     proximityTarget: ProximityTarget,
-    onProximityTargetChanged: (ProximityTarget) -> Unit
+    onProximityTargetChanged: (ProximityTarget) -> Unit,
+    microphoneEnabled: Boolean,
+    onMicrophoneChanged: (Boolean) -> Unit,
+    microphonePermissionGranted: Boolean,
+    microphoneTarget: MicrophoneTarget,
+    onMicrophoneTargetChanged: (MicrophoneTarget) -> Unit,
+    microphoneError: String?
 ) {
     Text("SENSOR SETTINGS", color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
     Spacer(Modifier.height(14.dp))
@@ -344,8 +423,61 @@ private fun SettingsScreen(
             )
         }
     }
+    Spacer(Modifier.height(14.dp))
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(Modifier.padding(18.dp)) {
+            Text("Microphone", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                if (microphonePermissionGranted) "Listens for three distinct tap-like sounds within 1.5 seconds."
+                else "Microphone permission is needed to detect tap-like sounds.",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(if (microphoneEnabled) "Enabled" else "Disabled", modifier = Modifier.weight(1f))
+                Button(onClick = { onMicrophoneChanged(!microphoneEnabled) }) {
+                    Text(if (microphoneEnabled) "Turn off" else "Turn on")
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            Text("Activate microphone for", fontWeight = FontWeight.SemiBold)
+            var microphoneMenuExpanded by remember { mutableStateOf(false) }
+            Spacer(Modifier.height(6.dp))
+            Button(onClick = { microphoneMenuExpanded = true }, enabled = microphoneEnabled) {
+                Text(microphoneTarget.label)
+            }
+            DropdownMenu(
+                expanded = microphoneMenuExpanded,
+                onDismissRequest = { microphoneMenuExpanded = false }
+            ) {
+                MicrophoneTarget.entries.forEach { target ->
+                    DropdownMenuItem(
+                        text = { Text(target.label) },
+                        onClick = {
+                            onMicrophoneTargetChanged(target)
+                            microphoneMenuExpanded = false
+                        }
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Make three separate taps or tap-like sounds near the phone within 1.5 seconds. This detects sound peaks, not the physical location of the taps.",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+            if (microphoneError != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(microphoneError, color = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
     Spacer(Modifier.height(16.dp))
-    Text("Accelerometer, microphone and camera triggers will be added in later steps.")
+    Text("Accelerometer and camera triggers will be added in later steps.")
 }
 
 private fun formatTime(seconds: Int): String =
