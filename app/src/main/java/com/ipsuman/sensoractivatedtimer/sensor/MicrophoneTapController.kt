@@ -28,6 +28,7 @@ class MicrophoneTapController(
     initialReferenceDurationMs: Long = 0L,
     intensityTolerancePercent: Int = 70,
     durationTolerancePercent: Int = 30,
+    private val onAudioMetrics: (Double, Int) -> Unit = { _, _ -> },
     private val onReferenceSoundChanged: (Double, Long) -> Unit = { _, _ -> }
 ) {
     @Volatile private var running = false
@@ -111,6 +112,8 @@ class MicrophoneTapController(
                             sumSquares += value * value
                         }
                         val rms = sqrt(sumSquares / count)
+                        val pitchHz = estimatePitchHz(buffer, count, sampleRate)
+                        mainHandler.post { if (running) onAudioMetrics(rms, pitchHz) }
                         val threshold = maxOf(1800.0, noiseFloor * 2.8)
                         val now = System.currentTimeMillis()
 
@@ -202,6 +205,34 @@ class MicrophoneTapController(
             recorder = null
             mainHandler.post { onError("Unable to start microphone: ${e.message ?: "unknown error"}") }
         }
+    }
+
+    private fun estimatePitchHz(samples: ShortArray, count: Int, sampleRate: Int): Int {
+        if (count < 512) return 0
+        // Autocorrelation pitch estimate; silence/noise naturally produces no stable pitch.
+        var bestLag = 0
+        var bestCorrelation = 0.0
+        val minLag = sampleRate / 1000 // about 1 kHz upper pitch
+        val maxLag = minOf(sampleRate / 70, count / 2)
+        for (lag in minLag..maxLag) {
+            var correlation = 0.0
+            var energyA = 0.0
+            var energyB = 0.0
+            for (i in 0 until count - lag) {
+                val a = samples[i].toDouble()
+                val b = samples[i + lag].toDouble()
+                correlation += a * b
+                energyA += a * a
+                energyB += b * b
+            }
+            val denominator = kotlin.math.sqrt(energyA * energyB)
+            val normalized = if (denominator > 0.0) correlation / denominator else 0.0
+            if (normalized > bestCorrelation) {
+                bestCorrelation = normalized
+                bestLag = lag
+            }
+        }
+        return if (bestCorrelation >= 0.25 && bestLag > 0) sampleRate / bestLag else 0
     }
 
     fun stop() {
