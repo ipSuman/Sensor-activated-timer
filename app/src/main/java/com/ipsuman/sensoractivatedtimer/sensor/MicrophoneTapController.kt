@@ -26,8 +26,8 @@ class MicrophoneTapController(
     private val triggerMode: MicrophoneTriggerMode = MicrophoneTriggerMode.RECORDED_SOUND,
     initialReferenceIntensity: Double = 0.0,
     initialReferenceDurationMs: Long = 0L,
-    private val intensityTolerancePercent: Int = 70,
-    private val durationTolerancePercent: Int = 30,
+    intensityTolerancePercent: Int = 70,
+    durationTolerancePercent: Int = 30,
     private val onReferenceSoundChanged: (Double, Long) -> Unit = { _, _ -> }
 ) {
     @Volatile private var running = false
@@ -36,7 +36,14 @@ class MicrophoneTapController(
     private val mainHandler = Handler(Looper.getMainLooper())
     @Volatile private var referenceIntensity = initialReferenceIntensity
     @Volatile private var referenceDurationMs = initialReferenceDurationMs
+    @Volatile private var intensityTolerancePercent = intensityTolerancePercent.coerceIn(0, 100)
+    @Volatile private var durationTolerancePercent = durationTolerancePercent.coerceIn(0, 100)
     @Volatile private var calibrationRequested = false
+
+    fun updateTolerances(intensityPercent: Int, durationPercent: Int) {
+        intensityTolerancePercent = intensityPercent.coerceIn(0, 100)
+        durationTolerancePercent = durationPercent.coerceIn(0, 100)
+    }
 
     /** Record ambient sound intensity for 2 seconds while the microphone listener is active. */
     fun recordReferenceSound() {
