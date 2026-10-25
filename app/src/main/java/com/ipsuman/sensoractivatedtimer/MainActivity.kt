@@ -12,15 +12,30 @@ import com.ipsuman.sensoractivatedtimer.ui.ClockApp
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enterFullscreen()
-        setContent {
-            ClockApp()
+        CrashLogger.log("MainActivity.onCreate started; SDK=${Build.VERSION.SDK_INT}")
+        try {
+            enterFullscreen()
+            CrashLogger.log("Fullscreen setup completed")
+            setContent {
+                ClockApp()
+            }
+            CrashLogger.log("Compose content installed")
+        } catch (error: Throwable) {
+            CrashLogger.log("FATAL: MainActivity.onCreate failed", error)
+            throw error
         }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) enterFullscreen()
+        if (hasFocus) {
+            try {
+                enterFullscreen()
+            } catch (error: Throwable) {
+                CrashLogger.log("Fullscreen update failed", error)
+                throw error
+            }
+        }
     }
 
     @Suppress("DEPRECATION")
