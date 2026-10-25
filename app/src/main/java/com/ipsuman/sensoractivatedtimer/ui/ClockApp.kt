@@ -2,6 +2,7 @@ package com.ipsuman.sensoractivatedtimer.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -15,6 +16,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -49,6 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ipsuman.sensoractivatedtimer.TimerNotificationHelper
 import com.ipsuman.sensoractivatedtimer.sensor.ProximitySensorController
 import com.ipsuman.sensoractivatedtimer.sensor.MicrophoneTapController
 import com.ipsuman.sensoractivatedtimer.sensor.MicrophoneTriggerMode
@@ -96,6 +100,17 @@ fun ClockApp() {
     var microphoneTarget by remember { mutableStateOf(MicrophoneTarget.TIMER) }
     var microphoneMode by remember { mutableStateOf(MicrophoneMode.TAP) }
     var microphoneError by remember { mutableStateOf<String?>(null) }
+    val notificationPrefs = remember(context) { context.getSharedPreferences("notification_settings", android.content.Context.MODE_PRIVATE) }
+    var notificationsEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("timer_notifications_enabled", false)) }
+    var notificationPermissionGranted by remember { mutableStateOf(TimerNotificationHelper.hasPermission(context)) }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        notificationPermissionGranted = granted
+        notificationsEnabled = granted
+        notificationPrefs.edit().putBoolean("timer_notifications_enabled", granted).apply()
+    }
 
     val microphonePermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -196,7 +211,12 @@ fun ClockApp() {
         while (timerRunning && remainingSeconds > 0) {
             delay(1000)
             remainingSeconds = (remainingSeconds - 1).coerceAtLeast(0)
-            if (remainingSeconds == 0) timerRunning = false
+            if (remainingSeconds == 0) {
+                timerRunning = false
+                if (notificationsEnabled && notificationPermissionGranted) {
+                    TimerNotificationHelper.showTimerComplete(context)
+                }
+            }
         }
     }
 
@@ -239,7 +259,7 @@ fun ClockApp() {
                 }
             ) { padding ->
                 Column(
-                    modifier = Modifier.fillMaxSize().padding(padding).padding(20.dp),
+                    modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(20.dp),
                     verticalArrangement = Arrangement.Top
                 ) {
                     when (selectedTab) {
@@ -285,7 +305,21 @@ fun ClockApp() {
                             onMicrophoneTargetChanged = { microphoneTarget = it },
                             microphoneMode = microphoneMode,
                             onMicrophoneModeChanged = { microphoneMode = it },
-                            microphoneError = microphoneError
+                            microphoneError = microphoneError,
+                            notificationsEnabled = notificationsEnabled,
+                            notificationPermissionGranted = notificationPermissionGranted,
+                            onNotificationsChanged = { enabled ->
+                                if (!enabled) {
+                                    notificationsEnabled = false
+                                    notificationPrefs.edit().putBoolean("timer_notifications_enabled", false).apply()
+                                } else if (TimerNotificationHelper.hasPermission(context)) {
+                                    notificationPermissionGranted = true
+                                    notificationsEnabled = true
+                                    notificationPrefs.edit().putBoolean("timer_notifications_enabled", true).apply()
+                                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                }
+                            }
                         )
                     }
                 }
@@ -511,6 +545,37 @@ private fun SettingsScreen(
             if (microphoneError != null) {
                 Spacer(Modifier.height(8.dp))
                 Text(microphoneError, color = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+    Spacer(Modifier.height(14.dp))
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(Modifier.padding(18.dp)) {
+            Text("Notification settings", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Show a notification when the countdown reaches zero.",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(if (notificationsEnabled) "Timer alerts enabled" else "Timer alerts disabled")
+                    Text(
+                        if (notificationPermissionGranted) "Notification permission is available."
+                        else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) "Android notification permission is required."
+                        else "Notifications are unavailable.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                }
+                Button(onClick = { onNotificationsChanged(!notificationsEnabled) }) {
+                    Text(if (notificationsEnabled) "Turn off" else "Turn on")
+                }
             }
         }
     }
