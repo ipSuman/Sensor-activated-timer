@@ -14,12 +14,21 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         CrashLogger.log("MainActivity.onCreate started; SDK=${Build.VERSION.SDK_INT}")
         try {
-            enterFullscreen()
-            CrashLogger.log("Fullscreen setup completed")
+            // Install the Compose content first so the window decor is initialized
+            // before accessing WindowInsetsController for immersive fullscreen.
             setContent {
                 ClockApp()
             }
             CrashLogger.log("Compose content installed")
+            window.decorView.post {
+                try {
+                    enterFullscreen()
+                    CrashLogger.log("Fullscreen setup completed")
+                } catch (error: Throwable) {
+                    CrashLogger.log("Fullscreen setup failed", error)
+                    // Do not crash the entire app if fullscreen setup is unsupported.
+                }
+            }
         } catch (error: Throwable) {
             CrashLogger.log("FATAL: MainActivity.onCreate failed", error)
             throw error
@@ -32,8 +41,8 @@ class MainActivity : ComponentActivity() {
             try {
                 enterFullscreen()
             } catch (error: Throwable) {
+                // Fullscreen is best-effort; a window UI issue must not close the app.
                 CrashLogger.log("Fullscreen update failed", error)
-                throw error
             }
         }
     }
