@@ -2,6 +2,8 @@ package com.ipsuman.sensoractivatedtimer
 
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
+import android.view.KeyEvent
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -10,6 +12,40 @@ import androidx.activity.compose.setContent
 import com.ipsuman.sensoractivatedtimer.ui.ClockApp
 
 class MainActivity : ComponentActivity() {
+    private var volumeGestureHandler: (() -> Unit)? = null
+    private var firstVolumeKeyCode: Int? = null
+    private var firstVolumeKeyDownAt: Long = 0L
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val gestureEnabled = getSharedPreferences("button_gesture_settings", MODE_PRIVATE)
+            .getBoolean("enabled", false)
+        val isVolumeKey = event.keyCode == KeyEvent.KEYCODE_VOLUME_UP ||
+            event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
+        if (!gestureEnabled || !isVolumeKey) return super.dispatchKeyEvent(event)
+
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            if (event.repeatCount > 0) return true
+            val now = SystemClock.elapsedRealtime()
+            val firstKey = firstVolumeKeyCode
+            if (firstKey == null || now - firstVolumeKeyDownAt > 600L || firstKey == event.keyCode) {
+                firstVolumeKeyCode = event.keyCode
+                firstVolumeKeyDownAt = now
+            } else {
+                firstVolumeKeyCode = null
+                firstVolumeKeyDownAt = 0L
+                try {
+                    volumeGestureHandler?.invoke()
+                    CrashLogger.log("Volume-button gesture triggered")
+                } catch (error: Throwable) {
+                    CrashLogger.log("Volume-button gesture handler failed", error)
+                }
+            }
+            return true
+        }
+        if (event.action == KeyEvent.ACTION_UP) return true
+        return true
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         CrashLogger.log("MainActivity.onCreate started; SDK=${Build.VERSION.SDK_INT}")
@@ -17,7 +53,7 @@ class MainActivity : ComponentActivity() {
             // Install the Compose content first so the window decor is initialized
             // before accessing WindowInsetsController for immersive fullscreen.
             setContent {
-                ClockApp()
+                ClockApp(onVolumeGestureHandlerChanged = { handler -> volumeGestureHandler = handler })
             }
             CrashLogger.log("Compose content installed")
             window.decorView.post {
