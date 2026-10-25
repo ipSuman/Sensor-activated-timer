@@ -25,13 +25,17 @@ class MicrophoneTapController(
     private val onError: (String) -> Unit = {},
     private val triggerMode: MicrophoneTriggerMode = MicrophoneTriggerMode.RECORDED_SOUND,
     initialReferenceIntensity: Double = 0.0,
-    private val onReferenceIntensityChanged: (Double) -> Unit = {}
+    initialReferenceDurationMs: Long = 0L,
+    private val intensityTolerancePercent: Int = 70,
+    private val durationTolerancePercent: Int = 30,
+    private val onReferenceSoundChanged: (Double, Long) -> Unit = { _, _ -> }
 ) {
     @Volatile private var running = false
     private var worker: Thread? = null
     private var recorder: AudioRecord? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     @Volatile private var referenceIntensity = initialReferenceIntensity
+    @Volatile private var referenceDurationMs = initialReferenceDurationMs
     @Volatile private var calibrationRequested = false
 
     /** Record ambient sound intensity for 2 seconds while the microphone listener is active. */
@@ -82,13 +86,14 @@ class MicrophoneTapController(
                 val buffer = ShortArray(1024)
                 var noiseFloor = 500.0
                 var aboveThreshold = false
-                var referenceTriggerArmed = true
+                var referenceEventStartedAt = 0L
                 var toneStartedAt = 0L
                 var toneTriggered = false
                 var lastLoudAt = 0L
                 var calibrationStartedAt = 0L
                 var calibrationSum = 0.0
                 var calibrationSamples = 0
+                var calibrationDurationMs = 0L
                 try {
                     while (running) {
                         val count = audioRecord.read(buffer, 0, buffer.size)
@@ -107,19 +112,22 @@ class MicrophoneTapController(
                                 calibrationStartedAt = now
                                 calibrationSum = 0.0
                                 calibrationSamples = 0
+                                calibrationDurationMs = 0L
                             }
                             if (rms > maxOf(800.0, noiseFloor * 1.8)) {
                                 calibrationSum += rms
                                 calibrationSamples++
+                                calibrationDurationMs += count * 1000L / sampleRate
                             }
                             if (now - calibrationStartedAt >= 2000L) {
                                 calibrationRequested = false
                                 calibrationStartedAt = 0L
                                 if (calibrationSamples >= 5) {
                                     referenceIntensity = calibrationSum / calibrationSamples
-                                    referenceTriggerArmed = false
-                                    val measured = referenceIntensity
-                                    mainHandler.post { onReferenceIntensityChanged(measured) }
+                                    referenceDurationMs = calibrationDurationMs.coerceAtLeast(1L)
+                                    val measuredIntensity = referenceIntensity
+                                    val measuredDuration = referenceDurationMs
+                                    mainHandler.post { onReferenceSoundChanged(measuredIntensity, measuredDuration) }
                                 } else {
                                     mainHandler.post { onError("The reference sound was too quiet. Try recording it again closer to the microphone.") }
                                 }
@@ -130,17 +138,21 @@ class MicrophoneTapController(
                         when (triggerMode) {
                             MicrophoneTriggerMode.RECORDED_SOUND -> {
                                 val reference = referenceIntensity
-                                // ±70% intensity window: 30% to 170% of the recorded RMS.
-                                val lowerBound = reference * 0.30
-                                val upperBound = reference * 1.70
+                                val tolerance = intensityTolerancePercent.coerceIn(0, 100) / 100.0
+                                val lowerBound = reference * (1.0 - tolerance)
+                                val upperBound = reference * (1.0 + tolerance)
                                 val matchesReference = reference > 100.0 && rms in lowerBound..upperBound
-                                if (!matchesReference) {
-                                    aboveThreshold = false
-                                    referenceTriggerArmed = true
-                                } else if (referenceTriggerArmed && !aboveThreshold) {
-                                    aboveThreshold = true
-                                    referenceTriggerArmed = false
-                                    mainHandler.post { if (running) onTripleTap() }
+                                if (matchesReference) {
+                                    if (referenceEventStartedAt == 0L) referenceEventStartedAt = now
+                                } else if (referenceEventStartedAt != 0L) {
+                                    val observedDuration = now - referenceEventStartedAt
+                                    val durationTolerance = durationTolerancePercent.coerceIn(0, 100) / 100.0
+                                    val minDuration = referenceDurationMs * (1.0 - durationTolerance)
+                                    val maxDuration = referenceDurationMs * (1.0 + durationTolerance)
+                                    referenceEventStartedAt = 0L
+                                    if (referenceDurationMs > 0L && observedDuration.toDouble() in minDuration..maxDuration) {
+                                        mainHandler.post { if (running) onTripleTap() }
+                                    }
                                 }
                             }
                             MicrophoneTriggerMode.TONE -> {
