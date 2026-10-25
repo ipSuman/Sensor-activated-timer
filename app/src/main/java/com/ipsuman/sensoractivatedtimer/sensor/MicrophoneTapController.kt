@@ -17,10 +17,15 @@ import kotlin.math.sqrt
  * This detects tap-like sounds near the microphone; it cannot verify that taps
  * physically happened on the back of the phone.
  */
+enum class MicrophoneTriggerMode {
+    TAP, TONE
+}
+
 class MicrophoneTapController(
     private val context: Context,
     private val onTripleTap: () -> Unit,
-    private val onError: (String) -> Unit = {}
+    private val onError: (String) -> Unit = {},
+    private val triggerMode: MicrophoneTriggerMode = MicrophoneTriggerMode.TAP
 ) {
     @Volatile private var running = false
     private var worker: Thread? = null
@@ -68,6 +73,9 @@ class MicrophoneTapController(
                 var noiseFloor = 500.0
                 var aboveThreshold = false
                 var lastPeakAt = 0L
+                var toneStartedAt = 0L
+                var toneTriggered = false
+                var lastLoudAt = 0L
                 try {
                     while (running) {
                         val count = audioRecord.read(buffer, 0, buffer.size)
@@ -81,22 +89,43 @@ class MicrophoneTapController(
                         val threshold = maxOf(1800.0, noiseFloor * 2.8)
                         val now = System.currentTimeMillis()
 
-                        if (!aboveThreshold && rms >= threshold && now - lastPeakAt >= 120) {
-                            aboveThreshold = true
-                            lastPeakAt = now
-                            peaks.addLast(now)
-                            while (peaks.isNotEmpty() && now - peaks.first() > 1500L) {
-                                peaks.removeFirst()
+                        when (triggerMode) {
+                            MicrophoneTriggerMode.TAP -> {
+                                if (!aboveThreshold && rms >= threshold && now - lastPeakAt >= 120) {
+                                    aboveThreshold = true
+                                    lastPeakAt = now
+                                    peaks.addLast(now)
+                                    while (peaks.isNotEmpty() && now - peaks.first() > 1500L) {
+                                        peaks.removeFirst()
+                                    }
+                                    if (peaks.size >= 3) {
+                                        peaks.clear()
+                                        mainHandler.post { if (running) onTripleTap() }
+                                    }
+                                } else if (aboveThreshold && rms < threshold * 0.55) {
+                                    aboveThreshold = false
+                                }
                             }
-                            if (peaks.size >= 3) {
-                                peaks.clear()
-                                mainHandler.post { if (running) onTripleTap() }
+                            MicrophoneTriggerMode.TONE -> {
+                                // Require sustained sound, trigger once per sound episode, and
+                                // re-arm after at least 400 ms without a loud signal.
+                                if (rms >= threshold) {
+                                    lastLoudAt = now
+                                    if (toneStartedAt == 0L) toneStartedAt = now
+                                    if (!toneTriggered && now - toneStartedAt >= 250L) {
+                                        toneTriggered = true
+                                        mainHandler.post { if (running) onTripleTap() }
+                                    }
+                                } else if (rms < threshold * 0.65) {
+                                    if (lastLoudAt != 0L && now - lastLoudAt >= 400L) {
+                                        toneStartedAt = 0L
+                                        toneTriggered = false
+                                    }
+                                }
                             }
-                        } else if (aboveThreshold && rms < threshold * 0.55) {
-                            aboveThreshold = false
                         }
 
-                        if (!aboveThreshold && rms < threshold) {
+                        if (rms < threshold * 0.55) {
                             noiseFloor = noiseFloor * 0.97 + rms * 0.03
                         }
                     }
