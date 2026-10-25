@@ -680,11 +680,6 @@ private fun TimerScreen(
             }
         }
     }
-    Spacer(Modifier.height(18.dp))
-    Text(
-        "Use the proximity setting to choose whether covering the sensor controls the timer, stopwatch, or both.",
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
-    )
 }
 
 @Composable
