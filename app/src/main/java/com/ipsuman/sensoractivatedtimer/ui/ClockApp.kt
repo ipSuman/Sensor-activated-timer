@@ -30,6 +30,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -78,7 +79,7 @@ private enum class MicrophoneTarget(val label: String) {
 }
 
 private enum class MicrophoneMode(val label: String, val description: String) {
-    RECORDED_SOUND("Recorded sound", "Record a sound, then trigger when the live microphone intensity is within ±70% of its recorded intensity."),
+    RECORDED_SOUND("Recorded sound", "Record a reference sound, then match its intensity and duration using the tolerances below."),
     TONE("Tone / music", "Triggers when a sustained loud tone or music is heard; it triggers once per sound episode.")
 }
 
@@ -106,6 +107,9 @@ fun ClockApp() {
     var microphoneController by remember { mutableStateOf<MicrophoneTapController?>(null) }
     val microphonePrefs = remember(context) { context.getSharedPreferences("microphone_settings", android.content.Context.MODE_PRIVATE) }
     var referenceIntensity by remember { mutableStateOf(microphonePrefs.getFloat("reference_intensity", 0f).toDouble()) }
+    var referenceDurationMs by remember { mutableLongStateOf(microphonePrefs.getLong("reference_duration_ms", 0L)) }
+    var intensityTolerance by remember { mutableIntStateOf(microphonePrefs.getInt("intensity_tolerance", 70)) }
+    var durationTolerance by remember { mutableIntStateOf(microphonePrefs.getInt("duration_tolerance", 30)) }
     var notificationTestMessage by remember { mutableStateOf<String?>(null) }
     val notificationPrefs = remember(context) { context.getSharedPreferences("notification_settings", android.content.Context.MODE_PRIVATE) }
     var notificationsEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("timer_notifications_enabled", false)) }
@@ -192,7 +196,7 @@ fun ClockApp() {
         }
     }
 
-    DisposableEffect(context, microphoneEnabled, microphonePermissionGranted, microphoneMode) {
+    DisposableEffect(context, microphoneEnabled, microphonePermissionGranted, microphoneMode, intensityTolerance, durationTolerance) {
         if (!microphoneEnabled || !microphonePermissionGranted) {
             onDispose { }
         } else {
@@ -202,10 +206,17 @@ fun ClockApp() {
                 onError = { error -> microphoneError = error; microphoneEnabled = false },
                 triggerMode = if (microphoneMode == MicrophoneMode.RECORDED_SOUND) MicrophoneTriggerMode.RECORDED_SOUND else MicrophoneTriggerMode.TONE,
                 initialReferenceIntensity = referenceIntensity,
-                onReferenceIntensityChanged = { intensity ->
+                initialReferenceDurationMs = referenceDurationMs,
+                intensityTolerancePercent = intensityTolerance,
+                durationTolerancePercent = durationTolerance,
+                onReferenceSoundChanged = { intensity, durationMs ->
                     referenceIntensity = intensity
-                    microphonePrefs.edit().putFloat("reference_intensity", intensity.toFloat()).apply()
-                    microphoneMessage = "Reference sound saved. Matching intensity window: ±70%."
+                    referenceDurationMs = durationMs
+                    microphonePrefs.edit()
+                        .putFloat("reference_intensity", intensity.toFloat())
+                        .putLong("reference_duration_ms", durationMs)
+                        .apply()
+                    microphoneMessage = "Reference saved: ${durationMs} ms sound duration."
                     microphoneError = null
                 }
             )
@@ -333,7 +344,18 @@ fun ClockApp() {
                             onMicrophoneModeChanged = { microphoneMode = it },
                             microphoneError = microphoneError,
                             microphoneMessage = microphoneMessage,
-                            referenceIntensitySaved = referenceIntensity > 100.0,
+                            referenceIntensitySaved = referenceIntensity > 100.0 && referenceDurationMs > 0L,
+                            intensityTolerance = intensityTolerance,
+                            onIntensityToleranceChanged = { value ->
+                                intensityTolerance = value
+                                microphonePrefs.edit().putInt("intensity_tolerance", value).apply()
+                            },
+                            durationTolerance = durationTolerance,
+                            onDurationToleranceChanged = { value ->
+                                durationTolerance = value
+                                microphonePrefs.edit().putInt("duration_tolerance", value).apply()
+                            },
+                            referenceDurationMs = referenceDurationMs,
                             onRecordReferenceSound = {
                                 microphoneMessage = "Recording reference for 2 seconds — make the trigger sound now."
                                 microphoneError = null
@@ -465,6 +487,11 @@ private fun SettingsScreen(
     microphoneError: String?,
     microphoneMessage: String?,
     referenceIntensitySaved: Boolean,
+    intensityTolerance: Int,
+    onIntensityToleranceChanged: (Int) -> Unit,
+    durationTolerance: Int,
+    onDurationToleranceChanged: (Int) -> Unit,
+    referenceDurationMs: Long,
     onRecordReferenceSound: () -> Unit,
     notificationsEnabled: Boolean,
     notificationPermissionGranted: Boolean,
@@ -574,9 +601,27 @@ private fun SettingsScreen(
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    if (referenceIntensitySaved) "A reference intensity is saved. Tap to record a new reference; make the sound for the full 2 seconds." else "Turn on the microphone, tap Record trigger sound, then make your chosen sound for 2 seconds.",
+                    if (referenceIntensitySaved) "Reference saved (${referenceDurationMs} ms sound duration). Record again to replace it." else "Turn on the microphone, tap Record trigger sound, and make one clear sound during the 2-second recording window.",
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
+                Spacer(Modifier.height(12.dp))
+                Text("Intensity tolerance: ±$intensityTolerance%", fontWeight = FontWeight.SemiBold)
+                Slider(
+                    value = intensityTolerance.toFloat(),
+                    onValueChange = { onIntensityToleranceChanged(it.toInt().coerceIn(0, 100)) },
+                    valueRange = 0f..100f,
+                    steps = 9
+                )
+                Text("Lower tolerance is more selective; higher tolerance accepts a wider volume range.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                Spacer(Modifier.height(8.dp))
+                Text("Duration tolerance: ±$durationTolerance%", fontWeight = FontWeight.SemiBold)
+                Slider(
+                    value = durationTolerance.toFloat(),
+                    onValueChange = { onDurationToleranceChanged(it.toInt().coerceIn(0, 100)) },
+                    valueRange = 0f..100f,
+                    steps = 9
+                )
+                Text("The sound must last within this percentage of the recorded sound's duration.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                 if (microphoneMessage != null) {
                     Spacer(Modifier.height(6.dp))
                     Text(microphoneMessage, color = MaterialTheme.colorScheme.primary)
@@ -606,7 +651,7 @@ private fun SettingsScreen(
             Spacer(Modifier.height(8.dp))
             Text(
                 if (microphoneMode == MicrophoneMode.RECORDED_SOUND)
-                    "When listening, the trigger fires when the microphone RMS intensity enters 30%–170% of the saved reference intensity. Background noise and microphone distance can affect matching."
+                    "A trigger is accepted only when both the sound intensity and its duration fall within the selected tolerances. Background noise and microphone distance can affect matching."
                 else
                     "Play music or a tone aloud near the phone. The trigger uses microphone sound level, not the phone's internal audio stream; loud environmental sounds may also trigger it.",
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
