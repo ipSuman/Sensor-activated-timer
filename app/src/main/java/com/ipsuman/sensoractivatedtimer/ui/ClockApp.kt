@@ -42,6 +42,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ipsuman.sensoractivatedtimer.sensor.ProximitySensorController
 import kotlinx.coroutines.delay
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 
 private val AppColors = darkColorScheme(
     primary = Color(0xFF70E1D1),
@@ -60,6 +62,7 @@ private enum class AppTab(val title: String) {
 @Composable
 fun ClockApp() {
     var selectedTab by remember { mutableStateOf(AppTab.TIMER) }
+    var currentTime by remember { mutableStateOf(LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"))) }
     var durationInput by remember { mutableStateOf("60") }
     var remainingSeconds by remember { mutableIntStateOf(0) }
     var timerRunning by remember { mutableStateOf(false) }
@@ -94,6 +97,13 @@ fun ClockApp() {
         }
     }
 
+    LaunchedEffect(Unit) {
+        while (true) {
+            currentTime = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"))
+            delay(1000)
+        }
+    }
+
     LaunchedEffect(timerRunning) {
         while (timerRunning && remainingSeconds > 0) {
             delay(1000)
@@ -124,6 +134,7 @@ fun ClockApp() {
                         )
                         Spacer(Modifier.height(5.dp))
                         Text("Clock", fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                        Text(currentTime, fontSize = 22.sp, color = AppColors.primary, fontWeight = FontWeight.SemiBold)
                     }
                 },
                 bottomBar = {
