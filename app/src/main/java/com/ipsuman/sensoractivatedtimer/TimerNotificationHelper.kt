@@ -17,7 +17,10 @@ import androidx.core.content.ContextCompat
 object TimerNotificationHelper {
     const val CHANNEL_ID = "timer_completion"
     const val ACTION_TIMER_COMPLETE = "com.ipsuman.sensoractivatedtimer.TIMER_COMPLETE"
+    const val EXTRA_CLOCK_NAME = "clock_name"
     private const val NOTIFICATION_ID = 1001
+    private const val TEST_NOTIFICATION_ID = 1002
+    private const val STATUS_NOTIFICATION_ID = 1003
     private const val REQUEST_CODE = 701
 
     fun hasPermission(context: Context): Boolean =
@@ -35,10 +38,10 @@ object TimerNotificationHelper {
                 manager.createNotificationChannel(
                     NotificationChannel(
                         CHANNEL_ID,
-                        "Timer alerts",
+                        "Timer and stopwatch",
                         NotificationManager.IMPORTANCE_HIGH
                     ).apply {
-                        description = "Alerts when the countdown timer finishes"
+                        description = "Clock status and timer completion alerts"
                         enableVibration(true)
                     }
                 )
@@ -55,7 +58,6 @@ object TimerNotificationHelper {
         try {
             alarmManager.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pendingIntent)
         } catch (error: SecurityException) {
-            // Inexact allow-while-idle alarms normally need no special exact-alarm access.
             CrashLogger.log("Unable to schedule timer notification", error)
         }
     }
@@ -66,13 +68,56 @@ object TimerNotificationHelper {
     }
 
     private fun completionPendingIntent(context: Context): PendingIntent {
-        val intent = Intent(context, TimerCompletionReceiver::class.java).setAction(ACTION_TIMER_COMPLETE)
+        val intent = Intent(context, TimerCompletionReceiver::class.java)
+            .setAction(ACTION_TIMER_COMPLETE)
+            .putExtra(EXTRA_CLOCK_NAME, "Timer")
         return PendingIntent.getBroadcast(
             context,
             REQUEST_CODE,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+    }
+
+    fun showClockStatus(context: Context, clockName: String, timeText: String) {
+        ensureChannel(context)
+        if (!hasPermission(context)) return
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentTitle("$clockName running")
+            .setContentText(if (clockName == "Timer") "Time remaining: $timeText" else "Elapsed time: $timeText")
+            .setOnlyAlertOnce(true)
+            .setOngoing(true)
+            .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+        try {
+            NotificationManagerCompat.from(context).notify(STATUS_NOTIFICATION_ID, notification)
+        } catch (error: SecurityException) {
+            CrashLogger.log("Unable to update clock status notification", error)
+        }
+    }
+
+    fun cancelClockStatus(context: Context) {
+        NotificationManagerCompat.from(context).cancel(STATUS_NOTIFICATION_ID)
+    }
+
+    fun showClockStopped(context: Context, clockName: String, timeText: String) {
+        ensureChannel(context)
+        if (!hasPermission(context)) return
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentTitle("$clockName paused")
+            .setContentText(if (clockName == "Timer") "Time remaining: $timeText" else "Elapsed time: $timeText")
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .build()
+        try {
+            NotificationManagerCompat.from(context).notify(STATUS_NOTIFICATION_ID, notification)
+        } catch (error: SecurityException) {
+            CrashLogger.log("Unable to show stopped clock notification", error)
+        }
     }
 
     fun showTimerComplete(context: Context, test: Boolean = false): Boolean {
@@ -87,14 +132,14 @@ object TimerNotificationHelper {
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle(if (test) "Notifications are working" else "Timer finished")
-            .setContentText(if (test) "Sensor Timer can show timer alerts on this device." else "Your countdown has completed.")
+            .setContentText(if (test) "Sensor Timer can show timer and stopwatch status." else "Timer completed — 00:00 remaining.")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setAutoCancel(true)
             .build()
 
         return try {
-            NotificationManagerCompat.from(context).notify(if (test) NOTIFICATION_ID + 1 else NOTIFICATION_ID, notification)
+            NotificationManagerCompat.from(context).notify(if (test) TEST_NOTIFICATION_ID else NOTIFICATION_ID, notification)
             true
         } catch (error: SecurityException) {
             CrashLogger.log("Unable to show timer notification", error)
