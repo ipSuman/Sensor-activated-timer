@@ -96,7 +96,10 @@ private enum class MicrophoneMode(val label: String, val description: String) {
 }
 
 @Composable
-fun ClockApp(\n    onVolumeGestureHandlerChanged: ((() -> Unit)?) -> Unit,\n    onVolumeGesturePauseHandlerChanged: ((() -> Unit)?) -> Unit\n) {
+fun ClockApp(
+    onVolumeGestureHandlerChanged: ((() -> Unit)?) -> Unit,
+    onVolumeGesturePauseHandlerChanged: ((() -> Unit)?) -> Unit
+) {
     val context = LocalContext.current
     val volumeGesturePrefs = remember(context) { context.getSharedPreferences("button_gesture_settings", android.content.Context.MODE_PRIVATE) }
     var volumeGestureEnabled by remember { mutableStateOf(volumeGesturePrefs.getBoolean("enabled", false)) }
