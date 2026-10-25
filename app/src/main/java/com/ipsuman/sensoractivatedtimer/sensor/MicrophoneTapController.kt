@@ -26,10 +26,12 @@ class MicrophoneTapController(
     private val triggerMode: MicrophoneTriggerMode = MicrophoneTriggerMode.RECORDED_SOUND,
     initialReferenceIntensity: Double = 0.0,
     initialReferenceDurationMs: Long = 0L,
+    initialReferencePitchHz: Int = 0,
     intensityTolerancePercent: Int = 70,
     durationTolerancePercent: Int = 30,
+    pitchTolerancePercent: Int = 20,
     private val onAudioMetrics: (Double, Int) -> Unit = { _, _ -> },
-    private val onReferenceSoundChanged: (Double, Long) -> Unit = { _, _ -> }
+    private val onReferenceSoundChanged: (Double, Long, Int) -> Unit = { _, _, _ -> }
 ) {
     @Volatile private var running = false
     private var worker: Thread? = null
@@ -37,13 +39,16 @@ class MicrophoneTapController(
     private val mainHandler = Handler(Looper.getMainLooper())
     @Volatile private var referenceIntensity = initialReferenceIntensity
     @Volatile private var referenceDurationMs = initialReferenceDurationMs
+    @Volatile private var referencePitchHz = initialReferencePitchHz.coerceAtLeast(0)
     @Volatile private var intensityTolerancePercent = intensityTolerancePercent.coerceIn(0, 100)
     @Volatile private var durationTolerancePercent = durationTolerancePercent.coerceIn(0, 100)
+    @Volatile private var pitchTolerancePercent = pitchTolerancePercent.coerceIn(0, 100)
     @Volatile private var calibrationRequested = false
 
-    fun updateTolerances(intensityPercent: Int, durationPercent: Int) {
+    fun updateTolerances(intensityPercent: Int, durationPercent: Int, pitchPercent: Int = pitchTolerancePercent) {
         intensityTolerancePercent = intensityPercent.coerceIn(0, 100)
         durationTolerancePercent = durationPercent.coerceIn(0, 100)
+        pitchTolerancePercent = pitchPercent.coerceIn(0, 100)
     }
 
     /** Record ambient sound intensity for 2 seconds while the microphone listener is active. */
@@ -102,6 +107,8 @@ class MicrophoneTapController(
                 var calibrationSum = 0.0
                 var calibrationSamples = 0
                 var calibrationDurationMs = 0L
+                var calibrationPitchSum = 0L
+                var calibrationPitchSamples = 0
                 try {
                     while (running) {
                         val count = audioRecord.read(buffer, 0, buffer.size)
@@ -123,11 +130,14 @@ class MicrophoneTapController(
                                 calibrationSum = 0.0
                                 calibrationSamples = 0
                                 calibrationDurationMs = 0L
+                                calibrationPitchSum = 0L
+                                calibrationPitchSamples = 0
                             }
                             if (rms > maxOf(800.0, noiseFloor * 1.8)) {
                                 calibrationSum += rms
                                 calibrationSamples++
                                 calibrationDurationMs += count * 1000L / sampleRate
+                                if (pitchHz > 0) { calibrationPitchSum += pitchHz; calibrationPitchSamples++ }
                             }
                             if (now - calibrationStartedAt >= 2000L) {
                                 calibrationRequested = false
@@ -135,9 +145,11 @@ class MicrophoneTapController(
                                 if (calibrationSamples >= 5) {
                                     referenceIntensity = calibrationSum / calibrationSamples
                                     referenceDurationMs = calibrationDurationMs.coerceAtLeast(1L)
+                                    referencePitchHz = if (calibrationPitchSamples > 0) (calibrationPitchSum / calibrationPitchSamples).toInt() else 0
                                     val measuredIntensity = referenceIntensity
                                     val measuredDuration = referenceDurationMs
-                                    mainHandler.post { onReferenceSoundChanged(measuredIntensity, measuredDuration) }
+                                    val measuredPitch = referencePitchHz
+                                    mainHandler.post { onReferenceSoundChanged(measuredIntensity, measuredDuration, measuredPitch) }
                                 } else {
                                     mainHandler.post { onError("The reference sound was too quiet. Try recording it again closer to the microphone.") }
                                 }
@@ -151,7 +163,10 @@ class MicrophoneTapController(
                                 val tolerance = intensityTolerancePercent.coerceIn(0, 100) / 100.0
                                 val lowerBound = reference * (1.0 - tolerance)
                                 val upperBound = reference * (1.0 + tolerance)
-                                val matchesReference = reference > 100.0 && rms in lowerBound..upperBound
+                                val pitchReference = referencePitchHz
+                                val pitchTolerance = pitchTolerancePercent.coerceIn(0, 100) / 100.0
+                                val pitchMatches = pitchReference <= 0 || (pitchHz > 0 && pitchHz.toDouble() in (pitchReference * (1.0 - pitchTolerance))..(pitchReference * (1.0 + pitchTolerance)))
+                                val matchesReference = reference > 100.0 && rms in lowerBound..upperBound && pitchMatches
                                 if (matchesReference) {
                                     if (referenceEventStartedAt == 0L) referenceEventStartedAt = now
                                 } else if (referenceEventStartedAt != 0L) {
