@@ -514,6 +514,7 @@ private fun SensorStatusPanel(
                 Text("Current pitch: ${if (microphonePitchHz > 0) "$microphonePitchHz Hz" else "— Hz"}")
                 Text("Intensity (RMS): ${microphoneLevel.toInt()}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
+                Text("Intensity ↑", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Canvas(Modifier.fillMaxWidth().height(120.dp)) {
                     val values = microphoneHistory
                     val left = 8f
@@ -534,15 +535,8 @@ private fun SensorStatusPanel(
                         }
                         drawPath(path, color = MaterialTheme.colorScheme.primary, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
                     }
-                    drawContext.canvas.nativeCanvas.apply {
-                        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                            color = android.graphics.Color.GRAY
-                            textSize = 10.sp.toPx()
-                        }
-                        drawText("Intensity", left, 10f, paint)
-                        drawText("Time →", right - 42f, size.height - 4f, paint)
-                    }
                 }
+                Text("Time →", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.End))
                 Text("Legend: current pitch in Hz • X axis: time • Y axis: intensity", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(12.dp))
             }
