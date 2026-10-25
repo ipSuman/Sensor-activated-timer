@@ -13,7 +13,8 @@ import android.hardware.SensorManager
 class ProximitySensorController(
     context: Context,
     private val onCovered: () -> Unit,
-    private val onAvailabilityChanged: (Boolean) -> Unit = {}
+    private val onAvailabilityChanged: (Boolean) -> Unit = {},
+    private val onDistanceChanged: (Float) -> Unit = {}
 ) : SensorEventListener {
 
     private val sensorManager =
@@ -39,7 +40,9 @@ class ProximitySensorController(
         if (event.sensor.type != Sensor.TYPE_PROXIMITY || event.values.isEmpty()) return
 
         val sensor = proximitySensor ?: return
-        val covered = event.values[0] < sensor.maximumRange
+        val distance = event.values[0]
+        onDistanceChanged(distance)
+        val covered = distance < sensor.maximumRange
 
         // Trigger only on the transition from clear to covered, not continuously.
         if (covered && !wasCovered) {
