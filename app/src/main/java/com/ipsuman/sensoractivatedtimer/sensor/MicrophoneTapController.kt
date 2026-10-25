@@ -31,7 +31,9 @@ class MicrophoneTapController(
     durationTolerancePercent: Int = 30,
     pitchTolerancePercent: Int = 20,
     private val onAudioMetrics: (Double, Int) -> Unit = { _, _ -> },
-    private val onReferenceSoundChanged: (Double, Long, Int) -> Unit = { _, _, _ -> }
+    private val onReferenceSoundChanged: (Double, Long, Int) -> Unit = { _, _, _ -> },
+    private val holdWhileToneActive: Boolean = false,
+    private val onToneActivityChanged: (Boolean) -> Unit = {}
 ) {
     @Volatile private var running = false
     private var worker: Thread? = null
@@ -102,6 +104,7 @@ class MicrophoneTapController(
                 var referenceEventStartedAt = 0L
                 var toneStartedAt = 0L
                 var toneTriggered = false
+                var toneActivityActive = false
                 var lastLoudAt = 0L
                 var calibrationStartedAt = 0L
                 var calibrationSum = 0.0
@@ -181,19 +184,30 @@ class MicrophoneTapController(
                                 }
                             }
                             MicrophoneTriggerMode.TONE -> {
-                                // Require sustained sound, trigger once per sound episode, and
-                                // re-arm after at least 400 ms without a loud signal.
+                                // Require 250 ms of sustained sound to activate. In hold mode,
+                                // release the timer as soon as the signal drops below the release
+                                // threshold; normal trigger mode retains its one-shot behavior.
                                 if (rms >= threshold) {
                                     lastLoudAt = now
                                     if (toneStartedAt == 0L) toneStartedAt = now
                                     if (!toneTriggered && now - toneStartedAt >= 250L) {
                                         toneTriggered = true
-                                        mainHandler.post { if (running) onTripleTap() }
+                                        if (holdWhileToneActive) {
+                                            toneActivityActive = true
+                                            mainHandler.post { if (running) onToneActivityChanged(true) }
+                                        } else {
+                                            mainHandler.post { if (running) onTripleTap() }
+                                        }
                                     }
                                 } else if (rms < threshold * 0.65) {
+                                    if (toneActivityActive) {
+                                        toneActivityActive = false
+                                        mainHandler.post { onToneActivityChanged(false) }
+                                    }
                                     if (lastLoudAt != 0L && now - lastLoudAt >= 400L) {
                                         toneStartedAt = 0L
                                         toneTriggered = false
+                                        lastLoudAt = 0L
                                     }
                                 }
                             }
@@ -252,6 +266,7 @@ class MicrophoneTapController(
 
     fun stop() {
         running = false
+        mainHandler.post { onToneActivityChanged(false) }
         try { recorder?.stop() } catch (_: IllegalStateException) { }
         recorder = null
         worker = null
