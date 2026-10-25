@@ -82,6 +82,7 @@ class MicrophoneTapController(
                 val buffer = ShortArray(1024)
                 var noiseFloor = 500.0
                 var aboveThreshold = false
+                var referenceTriggerArmed = true
                 var toneStartedAt = 0L
                 var toneTriggered = false
                 var lastLoudAt = 0L
@@ -107,7 +108,7 @@ class MicrophoneTapController(
                                 calibrationSum = 0.0
                                 calibrationSamples = 0
                             }
-                            if (rms > 100.0) {
+                            if (rms > maxOf(800.0, noiseFloor * 1.8)) {
                                 calibrationSum += rms
                                 calibrationSamples++
                             }
@@ -116,6 +117,7 @@ class MicrophoneTapController(
                                 calibrationStartedAt = 0L
                                 if (calibrationSamples >= 5) {
                                     referenceIntensity = calibrationSum / calibrationSamples
+                                    referenceTriggerArmed = false
                                     val measured = referenceIntensity
                                     mainHandler.post { onReferenceIntensityChanged(measured) }
                                 } else {
@@ -132,11 +134,13 @@ class MicrophoneTapController(
                                 val lowerBound = reference * 0.30
                                 val upperBound = reference * 1.70
                                 val matchesReference = reference > 100.0 && rms in lowerBound..upperBound
-                                if (matchesReference && !aboveThreshold) {
-                                    aboveThreshold = true
-                                    mainHandler.post { if (running) onTripleTap() }
-                                } else if (!matchesReference) {
+                                if (!matchesReference) {
                                     aboveThreshold = false
+                                    referenceTriggerArmed = true
+                                } else if (referenceTriggerArmed && !aboveThreshold) {
+                                    aboveThreshold = true
+                                    referenceTriggerArmed = false
+                                    mainHandler.post { if (running) onTripleTap() }
                                 }
                             }
                             MicrophoneTriggerMode.TONE -> {
