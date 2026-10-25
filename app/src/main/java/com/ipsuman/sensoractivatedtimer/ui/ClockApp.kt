@@ -1,5 +1,6 @@
 package com.ipsuman.sensoractivatedtimer.ui
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,6 +25,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -47,15 +49,8 @@ import kotlinx.coroutines.delay
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
-private val AppColors = darkColorScheme(
-    primary = Color(0xFF70E1D1),
-    onPrimary = Color(0xFF062B29),
-    secondary = Color(0xFFFFB86B),
-    background = Color(0xFF101719),
-    surface = Color(0xFF1A2427),
-    onBackground = Color(0xFFEAF4F3),
-    onSurface = Color(0xFFEAF4F3)
-)
+private val DarkColors = darkColorScheme()
+private val LightColors = lightColorScheme()
 
 private enum class AppTab(val title: String) {
     TIMER("Timer"), STOPWATCH("Stopwatch"), SETTINGS("Settings")
@@ -143,22 +138,23 @@ fun ClockApp() {
         }
     }
 
-    MaterialTheme(colorScheme = AppColors) {
-        Surface(modifier = Modifier.fillMaxSize(), color = AppColors.background) {
+    val colors = if (isSystemInDarkTheme()) DarkColors else LightColors
+    MaterialTheme(colorScheme = colors) {
+        Surface(modifier = Modifier.fillMaxSize(), color = colors.background) {
             Scaffold(
-                containerColor = AppColors.background,
+                containerColor = colors.background,
                 topBar = {
                     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 22.dp)) {
                         Text(
                             "SENSOR TIMER",
-                            color = AppColors.primary,
+                            color = colors.primary,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 2.sp
                         )
                         Spacer(Modifier.height(5.dp))
                         Text("Clock", fontSize = 32.sp, fontWeight = FontWeight.Bold)
-                        Text(currentTime, fontSize = 22.sp, color = AppColors.primary, fontWeight = FontWeight.SemiBold)
+                        Text(currentTime, fontSize = 22.sp, color = colors.primary, fontWeight = FontWeight.SemiBold)
                     }
                 },
                 bottomBar = {
