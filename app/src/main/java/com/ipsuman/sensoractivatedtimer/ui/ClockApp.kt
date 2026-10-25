@@ -225,12 +225,15 @@ fun ClockApp() {
         }
     }
 
-    LaunchedEffect(timerRunning) {
-        if (timerRunning && remainingSeconds > 0) {
+    LaunchedEffect(timerRunning, notificationsEnabled, notificationPermissionGranted) {
+        if (timerRunning && notificationsEnabled && notificationPermissionGranted && remainingSeconds > 0) {
             TimerNotificationHelper.scheduleTimerComplete(context, remainingSeconds)
         } else {
             TimerNotificationHelper.cancelTimerComplete(context)
         }
+    }
+
+    LaunchedEffect(timerRunning) {
         while (timerRunning && remainingSeconds > 0) {
             delay(1000)
             remainingSeconds = (remainingSeconds - 1).coerceAtLeast(0)
