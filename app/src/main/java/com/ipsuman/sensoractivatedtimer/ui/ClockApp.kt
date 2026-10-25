@@ -86,14 +86,23 @@ private enum class MicrophoneTarget(val label: String) {
     TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")
 }
 
+private enum class VolumeGestureTarget(val label: String) {
+    TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")
+}
+
 private enum class MicrophoneMode(val label: String, val description: String) {
     RECORDED_SOUND("Recorded sound", "Record a reference sound, then match its intensity and duration using the tolerances below."),
     TONE("Tone / music", "Triggers when a sustained loud tone or music is heard; it triggers once per sound episode.")
 }
 
 @Composable
-fun ClockApp() {
+fun ClockApp(onVolumeGestureHandlerChanged: ((() -> Unit)?) -> Unit) {
     val context = LocalContext.current
+    val volumeGesturePrefs = remember(context) { context.getSharedPreferences("button_gesture_settings", android.content.Context.MODE_PRIVATE) }
+    var volumeGestureEnabled by remember { mutableStateOf(volumeGesturePrefs.getBoolean("enabled", false)) }
+    var volumeGestureTarget by remember {
+        mutableStateOf(VolumeGestureTarget.entries.getOrElse(volumeGesturePrefs.getInt("target", 0)) { VolumeGestureTarget.TIMER })
+    }
     var selectedTab by remember { mutableStateOf(AppTab.TIMER) }
     var currentTime by remember { mutableStateOf(LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"))) }
     var durationInput by remember { mutableStateOf("60") }
@@ -133,6 +142,30 @@ fun ClockApp() {
     val notificationPrefs = remember(context) { context.getSharedPreferences("notification_settings", android.content.Context.MODE_PRIVATE) }
     var notificationsEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("timer_notifications_enabled", false)) }
     var notificationPermissionGranted by remember { mutableStateOf(TimerNotificationHelper.hasPermission(context)) }
+
+    val latestVolumeGestureAction by rememberUpdatedState<() -> Unit>({
+        when (volumeGestureTarget) {
+            VolumeGestureTarget.TIMER -> {
+                if (timerRunning) timerRunning = false else {
+                    if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
+                    timerRunning = remainingSeconds > 0
+                }
+            }
+            VolumeGestureTarget.STOPWATCH -> stopwatchRunning = !stopwatchRunning
+            VolumeGestureTarget.BOTH -> {
+                if (timerRunning) timerRunning = false else {
+                    if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
+                    timerRunning = remainingSeconds > 0
+                }
+                stopwatchRunning = !stopwatchRunning
+            }
+        }
+    })
+
+    DisposableEffect(Unit) {
+        onVolumeGestureHandlerChanged { latestVolumeGestureAction() }
+        onDispose { onVolumeGestureHandlerChanged(null) }
+    }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -417,6 +450,16 @@ fun ClockApp() {
                             )
                         }
                         AppTab.SETTINGS -> SettingsScreen(
+                            volumeGestureEnabled = volumeGestureEnabled,
+                            onVolumeGestureChanged = { enabled ->
+                                volumeGestureEnabled = enabled
+                                volumeGesturePrefs.edit().putBoolean("enabled", enabled).apply()
+                            },
+                            volumeGestureTarget = volumeGestureTarget,
+                            onVolumeGestureTargetChanged = { target ->
+                                volumeGestureTarget = target
+                                volumeGesturePrefs.edit().putInt("target", target.ordinal).apply()
+                            },
                             proximityEnabled = proximityEnabled,
                             onProximityChanged = { proximityEnabled = it },
                             proximityAvailable = proximityAvailable,
@@ -639,6 +682,10 @@ private fun StopwatchScreen(
 
 @Composable
 private fun SettingsScreen(
+    volumeGestureEnabled: Boolean,
+    onVolumeGestureChanged: (Boolean) -> Unit,
+    volumeGestureTarget: VolumeGestureTarget,
+    onVolumeGestureTargetChanged: (VolumeGestureTarget) -> Unit,
     proximityEnabled: Boolean,
     onProximityChanged: (Boolean) -> Unit,
     proximityAvailable: Boolean,
@@ -677,6 +724,56 @@ private fun SettingsScreen(
     onNotificationsChanged: (Boolean) -> Unit
 ) {
     Text("SENSOR SETTINGS", color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
+    Spacer(Modifier.height(14.dp))
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(Modifier.padding(18.dp)) {
+            Text("Button Gestures", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Press Volume + and Volume − together within 0.6 seconds to trigger the selected clock.",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(if (volumeGestureEnabled) "Enabled" else "Disabled", modifier = Modifier.weight(1f))
+                Button(onClick = { onVolumeGestureChanged(!volumeGestureEnabled) }) {
+                    Text(if (volumeGestureEnabled) "Turn off" else "Turn on")
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            Text("Trigger", fontWeight = FontWeight.SemiBold)
+            var volumeGestureMenuExpanded by remember { mutableStateOf(false) }
+            Spacer(Modifier.height(6.dp))
+            Button(onClick = { volumeGestureMenuExpanded = true }, enabled = volumeGestureEnabled) {
+                Text(volumeGestureTarget.label)
+            }
+            DropdownMenu(
+                expanded = volumeGestureMenuExpanded,
+                onDismissRequest = { volumeGestureMenuExpanded = false }
+            ) {
+                VolumeGestureTarget.entries.forEach { target ->
+                    DropdownMenuItem(
+                        text = { Text(target.label) },
+                        onClick = {
+                            onVolumeGestureTargetChanged(target)
+                            volumeGestureMenuExpanded = false
+                        }
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                if (volumeGestureEnabled) "While enabled, both volume keys are reserved for this gesture; single presses will not change media volume."
+                else "Turn this off to restore normal volume-button behavior.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+        }
+    }
     Spacer(Modifier.height(14.dp))
     Card(
         modifier = Modifier.fillMaxWidth(),
