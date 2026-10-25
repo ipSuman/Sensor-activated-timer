@@ -773,6 +773,7 @@ private fun SettingsScreen(
     notificationTestMessage: String?,
     onNotificationsChanged: (Boolean) -> Unit
 ) {
+    val context = LocalContext.current
     Text("SENSOR SETTINGS", color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
     Spacer(Modifier.height(14.dp))
     Card(
@@ -824,7 +825,7 @@ private fun SettingsScreen(
             )
             Spacer(Modifier.height(10.dp))
             Button(
-                onClick = { LocalContext.current.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
+                onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
                 enabled = volumeGestureEnabled,
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Enable screen-off gesture in Accessibility settings") }
