@@ -130,12 +130,14 @@ fun ClockApp(onVolumeGestureHandlerChanged: ((() -> Unit)?) -> Unit) {
     var microphoneMode by remember { mutableStateOf(MicrophoneMode.RECORDED_SOUND) }
     var toneHoldEnabled by remember { mutableStateOf(false) }
     var toneHoldWasActive by remember { mutableStateOf(false) }
+    var toneMinimumIntensity by remember { mutableIntStateOf(1800) }
     var microphoneError by remember { mutableStateOf<String?>(null) }
     var microphoneMessage by remember { mutableStateOf<String?>(null) }
     var microphoneController by remember { mutableStateOf<MicrophoneTapController?>(null) }
     val microphonePrefs = remember(context) { context.getSharedPreferences("microphone_settings", android.content.Context.MODE_PRIVATE) }
     LaunchedEffect(microphonePrefs) {
         toneHoldEnabled = microphonePrefs.getBoolean("tone_hold_timer", false)
+        toneMinimumIntensity = microphonePrefs.getInt("tone_minimum_intensity", 1800).coerceIn(500, 12000)
     }
     var referenceIntensity by remember { mutableStateOf(microphonePrefs.getFloat("reference_intensity", 0f).toDouble()) }
     var referenceDurationMs by remember { mutableLongStateOf(microphonePrefs.getLong("reference_duration_ms", 0L)) }
@@ -314,6 +316,7 @@ fun ClockApp(onVolumeGestureHandlerChanged: ((() -> Unit)?) -> Unit) {
                 triggerMode = if (microphoneMode == MicrophoneMode.RECORDED_SOUND) MicrophoneTriggerMode.RECORDED_SOUND else MicrophoneTriggerMode.TONE,
                 holdWhileToneActive = toneHoldEnabled && microphoneMode == MicrophoneMode.TONE,
                 onToneActivityChanged = { active -> latestToneHoldAction(active) },
+                initialToneMinimumIntensity = toneMinimumIntensity,
                 initialReferenceIntensity = referenceIntensity,
                 initialReferenceDurationMs = referenceDurationMs,
                 initialReferencePitchHz = referencePitchHz,
@@ -509,6 +512,13 @@ fun ClockApp(onVolumeGestureHandlerChanged: ((() -> Unit)?) -> Unit) {
                             onToneHoldChanged = { enabled ->
                                 toneHoldEnabled = enabled
                                 microphonePrefs.edit().putBoolean("tone_hold_timer", enabled).apply()
+                            },
+                            microphoneLevel = microphoneLevel,
+                            toneMinimumIntensity = toneMinimumIntensity,
+                            onToneMinimumIntensityChanged = { value ->
+                                toneMinimumIntensity = value.coerceIn(500, 12000)
+                                microphoneController?.updateToneMinimumIntensity(toneMinimumIntensity)
+                                microphonePrefs.edit().putInt("tone_minimum_intensity", toneMinimumIntensity).apply()
                             },
                             microphoneError = microphoneError,
                             microphoneMessage = microphoneMessage,
@@ -732,6 +742,9 @@ private fun SettingsScreen(
     onMicrophoneModeChanged: (MicrophoneMode) -> Unit,
     toneHoldEnabled: Boolean,
     onToneHoldChanged: (Boolean) -> Unit,
+    microphoneLevel: Float,
+    toneMinimumIntensity: Int,
+    onToneMinimumIntensityChanged: (Int) -> Unit,
     microphoneError: String?,
     microphoneMessage: String?,
     referenceIntensitySaved: Boolean,
@@ -953,6 +966,22 @@ private fun SettingsScreen(
             }
             Spacer(Modifier.height(6.dp))
             Text(microphoneMode.description, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+            if (microphoneMode == MicrophoneMode.TONE) {
+                Spacer(Modifier.height(12.dp))
+                Text("Noise filter — minimum intensity: $toneMinimumIntensity RMS", fontWeight = FontWeight.SemiBold)
+                Slider(
+                    value = toneMinimumIntensity.toFloat(),
+                    onValueChange = { onToneMinimumIntensityChanged(it.toInt().coerceIn(500, 12000)) },
+                    valueRange = 500f..12000f,
+                    steps = 22,
+                    enabled = microphoneEnabled
+                )
+                Text(
+                    "Live intensity: ${microphoneLevel.toInt()} RMS. Raise the threshold to ignore quieter background noise; lower it to detect softer tones.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+            }
             Spacer(Modifier.height(12.dp))
             Card(
                 modifier = Modifier.fillMaxWidth(),
