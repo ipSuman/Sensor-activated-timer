@@ -128,10 +128,15 @@ fun ClockApp(onVolumeGestureHandlerChanged: ((() -> Unit)?) -> Unit) {
     }
     var microphoneTarget by remember { mutableStateOf(MicrophoneTarget.TIMER) }
     var microphoneMode by remember { mutableStateOf(MicrophoneMode.RECORDED_SOUND) }
+    var toneHoldEnabled by remember { mutableStateOf(false) }
+    var toneHoldWasActive by remember { mutableStateOf(false) }
     var microphoneError by remember { mutableStateOf<String?>(null) }
     var microphoneMessage by remember { mutableStateOf<String?>(null) }
     var microphoneController by remember { mutableStateOf<MicrophoneTapController?>(null) }
     val microphonePrefs = remember(context) { context.getSharedPreferences("microphone_settings", android.content.Context.MODE_PRIVATE) }
+    LaunchedEffect(microphonePrefs) {
+        toneHoldEnabled = microphonePrefs.getBoolean("tone_hold_timer", false)
+    }
     var referenceIntensity by remember { mutableStateOf(microphonePrefs.getFloat("reference_intensity", 0f).toDouble()) }
     var referenceDurationMs by remember { mutableLongStateOf(microphonePrefs.getLong("reference_duration_ms", 0L)) }
     var intensityTolerance by remember { mutableIntStateOf(microphonePrefs.getInt("intensity_tolerance", 70)) }
@@ -285,7 +290,20 @@ fun ClockApp(onVolumeGestureHandlerChanged: ((() -> Unit)?) -> Unit) {
         }
     }
 
-    DisposableEffect(context, microphoneEnabled, microphonePermissionGranted, microphoneMode) {
+    val latestToneHoldAction by rememberUpdatedState<(Boolean) -> Unit>({ active ->
+        if (active) {
+            toneHoldWasActive = true
+            if (remainingSeconds == 0) {
+                remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
+            }
+            timerRunning = remainingSeconds > 0
+        } else if (toneHoldWasActive) {
+            toneHoldWasActive = false
+            timerRunning = false
+        }
+    })
+
+    DisposableEffect(context, microphoneEnabled, microphonePermissionGranted, microphoneMode, toneHoldEnabled) {
         if (!microphoneEnabled || !microphonePermissionGranted) {
             onDispose { }
         } else {
@@ -294,6 +312,8 @@ fun ClockApp(onVolumeGestureHandlerChanged: ((() -> Unit)?) -> Unit) {
                 onTripleTap = { latestMicrophoneAction() },
                 onError = { error -> microphoneError = error; microphoneEnabled = false },
                 triggerMode = if (microphoneMode == MicrophoneMode.RECORDED_SOUND) MicrophoneTriggerMode.RECORDED_SOUND else MicrophoneTriggerMode.TONE,
+                holdWhileToneActive = toneHoldEnabled && microphoneMode == MicrophoneMode.TONE,
+                onToneActivityChanged = { active -> latestToneHoldAction(active) },
                 initialReferenceIntensity = referenceIntensity,
                 initialReferenceDurationMs = referenceDurationMs,
                 initialReferencePitchHz = referencePitchHz,
@@ -485,6 +505,11 @@ fun ClockApp(onVolumeGestureHandlerChanged: ((() -> Unit)?) -> Unit) {
                             onMicrophoneTargetChanged = { microphoneTarget = it },
                             microphoneMode = microphoneMode,
                             onMicrophoneModeChanged = { microphoneMode = it },
+                            toneHoldEnabled = toneHoldEnabled,
+                            onToneHoldChanged = { enabled ->
+                                toneHoldEnabled = enabled
+                                microphonePrefs.edit().putBoolean("tone_hold_timer", enabled).apply()
+                            },
                             microphoneError = microphoneError,
                             microphoneMessage = microphoneMessage,
                             referenceIntensitySaved = referenceIntensity > 100.0 && referenceDurationMs > 0L,
@@ -705,6 +730,8 @@ private fun SettingsScreen(
     onMicrophoneTargetChanged: (MicrophoneTarget) -> Unit,
     microphoneMode: MicrophoneMode,
     onMicrophoneModeChanged: (MicrophoneMode) -> Unit,
+    toneHoldEnabled: Boolean,
+    onToneHoldChanged: (Boolean) -> Unit,
     microphoneError: String?,
     microphoneMessage: String?,
     referenceIntensitySaved: Boolean,
@@ -926,6 +953,33 @@ private fun SettingsScreen(
             }
             Spacer(Modifier.height(6.dp))
             Text(microphoneMode.description, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+            Spacer(Modifier.height(12.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(Modifier.padding(14.dp)) {
+                    Text("Run timer while tone plays", fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Starts the timer after a sustained tone is detected and pauses it as soon as the tone signal stops. This works with Tone / music mode.",
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        fontSize = 13.sp
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (toneHoldEnabled) "Enabled" else "Disabled", modifier = Modifier.weight(1f))
+                        Button(
+                            onClick = { onToneHoldChanged(!toneHoldEnabled) },
+                            enabled = microphoneEnabled && microphoneMode == MicrophoneMode.TONE
+                        ) { Text(if (toneHoldEnabled) "Turn off" else "Turn on") }
+                    }
+                    if (toneHoldEnabled && microphoneMode != MicrophoneMode.TONE) {
+                        Text("Select Tone / music above to use this option.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    }
+                }
+            }
             if (microphoneMode == MicrophoneMode.RECORDED_SOUND) {
                 Spacer(Modifier.height(12.dp))
                 Button(onClick = onRecordReferenceSound, enabled = microphoneEnabled) {
