@@ -33,7 +33,8 @@ class MicrophoneTapController(
     private val onAudioMetrics: (Double, Int) -> Unit = { _, _ -> },
     private val onReferenceSoundChanged: (Double, Long, Int) -> Unit = { _, _, _ -> },
     private val holdWhileToneActive: Boolean = false,
-    private val onToneActivityChanged: (Boolean) -> Unit = {}
+    private val onToneActivityChanged: (Boolean) -> Unit = {},
+    initialToneMinimumIntensity: Int = 1800
 ) {
     @Volatile private var running = false
     private var worker: Thread? = null
@@ -45,7 +46,12 @@ class MicrophoneTapController(
     @Volatile private var intensityTolerancePercent = intensityTolerancePercent.coerceIn(0, 100)
     @Volatile private var durationTolerancePercent = durationTolerancePercent.coerceIn(0, 100)
     @Volatile private var pitchTolerancePercent = pitchTolerancePercent.coerceIn(0, 100)
+    @Volatile private var toneMinimumIntensity = initialToneMinimumIntensity.coerceIn(500, 12000).toDouble()
     @Volatile private var calibrationRequested = false
+
+    fun updateToneMinimumIntensity(value: Int) {
+        toneMinimumIntensity = value.coerceIn(500, 12000).toDouble()
+    }
 
     fun updateTolerances(intensityPercent: Int, durationPercent: Int, pitchPercent: Int = pitchTolerancePercent) {
         intensityTolerancePercent = intensityPercent.coerceIn(0, 100)
@@ -124,7 +130,7 @@ class MicrophoneTapController(
                         val rms = sqrt(sumSquares / count)
                         val pitchHz = estimatePitchHz(buffer, count, sampleRate)
                         mainHandler.post { if (running) onAudioMetrics(rms, pitchHz) }
-                        val threshold = maxOf(1800.0, noiseFloor * 2.8)
+                        val threshold = maxOf(toneMinimumIntensity, noiseFloor * 2.8)
                         val now = System.currentTimeMillis()
 
                         if (calibrationRequested) {
