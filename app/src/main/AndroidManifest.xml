@@ -11,6 +11,10 @@
         android:label="Sensor Timer"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
+        <receiver
+            android:name=".TimerCompletionReceiver"
+            android:enabled="true"
+            android:exported="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true">
