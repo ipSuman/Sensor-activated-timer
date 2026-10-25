@@ -264,6 +264,28 @@ fun ClockApp() {
         }
     }
 
+    LaunchedEffect(timerRunning, stopwatchRunning, notificationsEnabled, notificationPermissionGranted) {
+        if (!notificationsEnabled || !notificationPermissionGranted || (!timerRunning && !stopwatchRunning)) {
+            TimerNotificationHelper.cancelClockStatus(context)
+        } else {
+            while (notificationsEnabled && notificationPermissionGranted && (timerRunning || stopwatchRunning)) {
+                val timerText = formatTime(remainingSeconds)
+                val stopwatchText = formatStopwatch(stopwatchMillis)
+                when {
+                    timerRunning && stopwatchRunning -> TimerNotificationHelper.showClockStatus(
+                        context,
+                        "Timer & Stopwatch",
+                        "Timer: $timerText remaining • Stopwatch: $stopwatchText elapsed"
+                    )
+                    timerRunning -> TimerNotificationHelper.showClockStatus(context, "Timer", timerText)
+                    stopwatchRunning -> TimerNotificationHelper.showClockStatus(context, "Stopwatch", stopwatchText)
+                }
+                delay(1000)
+            }
+            TimerNotificationHelper.cancelClockStatus(context)
+        }
+    }
+
     val colors = if (isSystemInDarkTheme()) DarkColors else LightColors
     MaterialTheme(colorScheme = colors) {
         Surface(modifier = Modifier.fillMaxSize(), color = colors.background) {
