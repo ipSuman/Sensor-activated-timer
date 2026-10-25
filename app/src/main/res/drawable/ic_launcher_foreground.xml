@@ -1,0 +1,33 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Hourglass silhouette: one continuous waist joining upper and lower chambers. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,20 L76,20 L76,27 C76,38 68,45 59,52 C68,59 76,66 76,81 L76,88 L32,88 L32,81 C32,66 40,59 49,52 C40,45 32,38 32,27 Z"/>
+    <path
+        android:fillColor="#123B43"
+        android:pathData="M39,27 L69,27 C69,35 63,41 54,48 C45,41 39,35 39,27 Z"/>
+    <path
+        android:fillColor="#123B43"
+        android:pathData="M39,81 L69,81 C69,72 63,65 54,58 C45,65 39,72 39,81 Z"/>
+    <!-- Sensor rings fuse into the hourglass waist. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,43 A9,9 0,1 0,54 61 A9,9 0,1 0,54 43 Z"/>
+    <path
+        android:fillColor="#20C6B7"
+        android:pathData="M54,47 A5,5 0,1 0,54 57 A5,5 0,1 0,54 47 Z"/>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,50 A2,2 0,1 0,54 54 A2,2 0,1 0,54 50 Z"/>
+    <!-- Short sensor-wave marks on either side. -->
+    <path
+        android:fillColor="#20C6B7"
+        android:pathData="M23,45 L27,45 L27,59 L23,59 Z M81,45 L85,45 L85,59 L81,59 Z"/>
+    <path
+        android:fillColor="#20C6B7"
+        android:pathData="M17,40 L21,40 L21,64 L17,64 Z M87,40 L91,40 L91,64 L87,64 Z"/>
+</vector>
