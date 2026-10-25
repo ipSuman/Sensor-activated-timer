@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.sp
 import com.ipsuman.sensoractivatedtimer.TimerNotificationHelper
 import com.ipsuman.sensoractivatedtimer.sensor.ProximitySensorController
 import com.ipsuman.sensoractivatedtimer.sensor.AccelerometerController
+import com.ipsuman.sensoractivatedtimer.sensor.AccelerometerController
 import com.ipsuman.sensoractivatedtimer.sensor.MicrophoneTapController
 import com.ipsuman.sensoractivatedtimer.sensor.MicrophoneTriggerMode
 import kotlinx.coroutines.delay
@@ -75,7 +76,11 @@ private enum class ProximityTarget(val label: String) {
     TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")
 }
 
-private enum class AccelerometerTarget(val label: String) {\n    TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")\n}\n\nprivate enum class MicrophoneTarget(val label: String) {
+private enum class AccelerometerTarget(val label: String) {\n    TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")\n}\n\nprivate enum class AccelerometerTarget(val label: String) {
+    TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")
+}
+
+private enum class MicrophoneTarget(val label: String) {
     TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")
 }
 
@@ -97,6 +102,11 @@ fun ClockApp() {
     var proximityAvailable by remember { mutableStateOf(true) }
     var proximityEnabled by remember { mutableStateOf(true) }
     var proximityTarget by remember { mutableStateOf(ProximityTarget.TIMER) }
+    var accelerometerAvailable by remember { mutableStateOf(true) }
+    val accelerometerPrefs = remember(context) { context.getSharedPreferences("accelerometer_settings", android.content.Context.MODE_PRIVATE) }
+    var accelerometerEnabled by remember { mutableStateOf(accelerometerPrefs.getBoolean("enabled", false)) }
+    var accelerometerTarget by remember { mutableStateOf(AccelerometerTarget.entries.getOrElse(accelerometerPrefs.getInt("target", 0)) { AccelerometerTarget.TIMER }) }
+    var accelerometerSensitivity by remember { mutableIntStateOf(accelerometerPrefs.getInt("sensitivity", 5).coerceIn(1, 10)) }
     var microphoneEnabled by remember { mutableStateOf(false) }
     var microphonePermissionGranted by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
@@ -183,6 +193,25 @@ fun ClockApp() {
         }
     })
 
+    val latestAccelerometerAction by rememberUpdatedState<() -> Unit>({
+        when (accelerometerTarget) {
+            AccelerometerTarget.TIMER -> {
+                if (timerRunning) timerRunning = false else {
+                    if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
+                    timerRunning = remainingSeconds > 0
+                }
+            }
+            AccelerometerTarget.STOPWATCH -> stopwatchRunning = !stopwatchRunning
+            AccelerometerTarget.BOTH -> {
+                if (timerRunning) timerRunning = false else {
+                    if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
+                    timerRunning = remainingSeconds > 0
+                }
+                stopwatchRunning = !stopwatchRunning
+            }
+        }
+    })
+
     val latestMicrophoneAction by rememberUpdatedState<() -> Unit>({
         when (microphoneTarget) {
             MicrophoneTarget.TIMER -> {
@@ -210,6 +239,23 @@ fun ClockApp() {
                 context = context,
                 onCovered = { latestProximityAction() },
                 onAvailabilityChanged = { proximityAvailable = it }
+            )
+            controller.start()
+            onDispose { controller.stop() }
+        }
+    }
+
+    DisposableEffect(context, accelerometerEnabled, accelerometerSensitivity) {
+        if (!accelerometerEnabled) {
+            accelerometerAvailable = (context.getSystemService(Context.SENSOR_SERVICE) as android.hardware.SensorManager)
+                .getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER) != null
+            onDispose { }
+        } else {
+            val controller = AccelerometerController(
+                context = context,
+                sensitivity = accelerometerSensitivity,
+                onShake = { latestAccelerometerAction() },
+                onAvailabilityChanged = { accelerometerAvailable = it }
             )
             controller.start()
             onDispose { controller.stop() }
@@ -387,6 +433,13 @@ fun ClockApp() {
                             onProximityChanged = { proximityEnabled = it },
                             proximityAvailable = proximityAvailable,
                             proximityTarget = proximityTarget,
+                            accelerometerEnabled = accelerometerEnabled,
+                            onAccelerometerChanged = { enabled -> accelerometerEnabled = enabled; accelerometerPrefs.edit().putBoolean("enabled", enabled).apply() },
+                            accelerometerAvailable = accelerometerAvailable,
+                            accelerometerTarget = accelerometerTarget,
+                            onAccelerometerTargetChanged = { target -> accelerometerTarget = target; accelerometerPrefs.edit().putInt("target", target.ordinal).apply() },
+                            accelerometerSensitivity = accelerometerSensitivity,
+                            onAccelerometerSensitivityChanged = { value -> accelerometerSensitivity = value; accelerometerPrefs.edit().putInt("sensitivity", value).apply() },
                             onProximityTargetChanged = { proximityTarget = it },
                             microphoneEnabled = microphoneEnabled,
                             onMicrophoneChanged = { enabled ->
@@ -538,6 +591,13 @@ private fun SettingsScreen(
     proximityAvailable: Boolean,
     proximityTarget: ProximityTarget,
     onProximityTargetChanged: (ProximityTarget) -> Unit,
+    accelerometerEnabled: Boolean,
+    onAccelerometerChanged: (Boolean) -> Unit,
+    accelerometerAvailable: Boolean,
+    accelerometerTarget: AccelerometerTarget,
+    onAccelerometerTargetChanged: (AccelerometerTarget) -> Unit,
+    accelerometerSensitivity: Int,
+    onAccelerometerSensitivityChanged: (Int) -> Unit,
     microphoneEnabled: Boolean,
     onMicrophoneChanged: (Boolean) -> Unit,
     microphonePermissionGranted: Boolean,
@@ -611,6 +671,65 @@ private fun SettingsScreen(
             )
         }
     }
+    Spacer(Modifier.height(14.dp))
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(Modifier.padding(18.dp)) {
+            Text("Accelerometer", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                if (accelerometerAvailable) "Shake the phone to start or pause the selected clock."
+                else "This device does not report an accelerometer.",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(if (accelerometerEnabled) "Enabled" else "Disabled", modifier = Modifier.weight(1f))
+                Button(onClick = { onAccelerometerChanged(!accelerometerEnabled) }, enabled = accelerometerAvailable) {
+                    Text(if (accelerometerEnabled) "Turn off" else "Turn on")
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            Text("Activate accelerometer for", fontWeight = FontWeight.SemiBold)
+            var accelerometerMenuExpanded by remember { mutableStateOf(false) }
+            Spacer(Modifier.height(6.dp))
+            Button(onClick = { accelerometerMenuExpanded = true }, enabled = accelerometerEnabled && accelerometerAvailable) {
+                Text(accelerometerTarget.label)
+            }
+            DropdownMenu(
+                expanded = accelerometerMenuExpanded,
+                onDismissRequest = { accelerometerMenuExpanded = false }
+            ) {
+                AccelerometerTarget.entries.forEach { target ->
+                    DropdownMenuItem(
+                        text = { Text(target.label) },
+                        onClick = {
+                            onAccelerometerTargetChanged(target)
+                            accelerometerMenuExpanded = false
+                        }
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Text("Sensitivity: $accelerometerSensitivity / 10", fontWeight = FontWeight.SemiBold)
+            Slider(
+                value = accelerometerSensitivity.toFloat(),
+                onValueChange = { onAccelerometerSensitivityChanged(it.toInt().coerceIn(1, 10)) },
+                valueRange = 1f..10f,
+                steps = 8,
+                enabled = accelerometerEnabled && accelerometerAvailable
+            )
+            Text(
+                "Higher sensitivity detects gentler shakes; lower sensitivity requires a stronger shake. A short cooldown helps prevent repeated triggers.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+        }
+    }
+
     Spacer(Modifier.height(14.dp))
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -764,7 +883,6 @@ private fun SettingsScreen(
         }
     }
     Spacer(Modifier.height(16.dp))
-    Text("Accelerometer and camera triggers will be added in later steps.")
 }
 
 private fun formatTime(seconds: Int): String =
