@@ -96,7 +96,7 @@ private enum class MicrophoneMode(val label: String, val description: String) {
 }
 
 @Composable
-fun ClockApp(onVolumeGestureHandlerChanged: ((() -> Unit)?) -> Unit) {
+fun ClockApp(\n    onVolumeGestureHandlerChanged: ((() -> Unit)?) -> Unit,\n    onVolumeGesturePauseHandlerChanged: ((() -> Unit)?) -> Unit\n) {
     val context = LocalContext.current
     val volumeGesturePrefs = remember(context) { context.getSharedPreferences("button_gesture_settings", android.content.Context.MODE_PRIVATE) }
     var volumeGestureEnabled by remember { mutableStateOf(volumeGesturePrefs.getBoolean("enabled", false)) }
@@ -169,9 +169,24 @@ fun ClockApp(onVolumeGestureHandlerChanged: ((() -> Unit)?) -> Unit) {
         }
     })
 
+    val latestVolumeGesturePauseAction by rememberUpdatedState<() -> Unit>({
+        when (volumeGestureTarget) {
+            VolumeGestureTarget.TIMER -> if (timerRunning) timerRunning = false
+            VolumeGestureTarget.STOPWATCH -> if (stopwatchRunning) stopwatchRunning = false
+            VolumeGestureTarget.BOTH -> {
+                timerRunning = false
+                stopwatchRunning = false
+            }
+        }
+    })
+
     DisposableEffect(Unit) {
         onVolumeGestureHandlerChanged { latestVolumeGestureAction() }
-        onDispose { onVolumeGestureHandlerChanged(null) }
+        onVolumeGesturePauseHandlerChanged { latestVolumeGesturePauseAction() }
+        onDispose {
+            onVolumeGestureHandlerChanged(null)
+            onVolumeGesturePauseHandlerChanged(null)
+        }
     }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -804,6 +819,17 @@ private fun SettingsScreen(
             Text(
                 if (volumeGestureEnabled) "While enabled, Volume Down presses are reserved for this gesture and will not change media volume. Volume Up works normally."
                 else "Turn this off to restore normal volume-button behavior.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+            Spacer(Modifier.height(10.dp))
+            Button(
+                onClick = { LocalContext.current.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
+                enabled = volumeGestureEnabled,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Enable screen-off gesture in Accessibility settings") }
+            Text(
+                "Enable Sensor Timer's Volume Gesture service in Android Accessibility settings. Triple Volume Down pauses the selected running clock. Device restrictions may still affect screen-off key events.",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
