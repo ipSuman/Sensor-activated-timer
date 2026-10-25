@@ -3,6 +3,10 @@ package com.ipsuman.sensoractivatedtimer
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
+import androidx.core.content.ContextCompat
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowInsets
@@ -15,6 +19,19 @@ class MainActivity : ComponentActivity() {
     private var volumeGestureHandler: (() -> Unit)? = null
     private var volumeDownPressCount = 0
     private var firstVolumeDownAt: Long = 0L
+    private var volumeGesturePauseHandler: (() -> Unit)? = null
+    private val backgroundGestureReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: android.content.Intent?) {
+            if (intent?.action == VolumeGestureAccessibilityService.ACTION_PAUSE_CLOCK) {
+                try {
+                    volumeGesturePauseHandler?.invoke()
+                    CrashLogger.log("Background triple Volume Down gesture requested pause")
+                } catch (error: Throwable) {
+                    CrashLogger.log("Background volume gesture handler failed", error)
+                }
+            }
+        }
+    }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val gestureEnabled = getSharedPreferences("button_gesture_settings", MODE_PRIVATE)
@@ -55,8 +72,17 @@ class MainActivity : ComponentActivity() {
         try {
             // Install the Compose content first so the window decor is initialized
             // before accessing WindowInsetsController for immersive fullscreen.
+            ContextCompat.registerReceiver(
+                this,
+                backgroundGestureReceiver,
+                IntentFilter(VolumeGestureAccessibilityService.ACTION_PAUSE_CLOCK),
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
             setContent {
-                ClockApp(onVolumeGestureHandlerChanged = { handler -> volumeGestureHandler = handler })
+                ClockApp(
+                    onVolumeGestureHandlerChanged = { handler -> volumeGestureHandler = handler },
+                    onVolumeGesturePauseHandlerChanged = { handler -> volumeGesturePauseHandler = handler }
+                )
             }
             CrashLogger.log("Compose content installed")
             window.decorView.post {
@@ -72,6 +98,13 @@ class MainActivity : ComponentActivity() {
             CrashLogger.log("FATAL: MainActivity.onCreate failed", error)
             throw error
         }
+    }
+
+    override fun onDestroy() {
+        try { unregisterReceiver(backgroundGestureReceiver) } catch (_: IllegalArgumentException) {}
+        volumeGestureHandler = null
+        volumeGesturePauseHandler = null
+        super.onDestroy()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
