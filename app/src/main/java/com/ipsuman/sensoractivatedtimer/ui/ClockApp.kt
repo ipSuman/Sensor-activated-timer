@@ -417,7 +417,10 @@ private fun SettingsScreen(
     onMicrophoneTargetChanged: (MicrophoneTarget) -> Unit,
     microphoneMode: MicrophoneMode,
     onMicrophoneModeChanged: (MicrophoneMode) -> Unit,
-    microphoneError: String?
+    microphoneError: String?,
+    notificationsEnabled: Boolean,
+    notificationPermissionGranted: Boolean,
+    onNotificationsChanged: (Boolean) -> Unit
 ) {
     Text("SENSOR SETTINGS", color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
     Spacer(Modifier.height(14.dp))
