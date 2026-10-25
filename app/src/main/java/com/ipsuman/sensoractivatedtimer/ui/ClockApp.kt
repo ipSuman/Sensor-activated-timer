@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ipsuman.sensoractivatedtimer.sensor.ProximitySensorController
 import com.ipsuman.sensoractivatedtimer.sensor.MicrophoneTapController
+import com.ipsuman.sensoractivatedtimer.sensor.MicrophoneTriggerMode
 import kotlinx.coroutines.delay
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -68,6 +69,11 @@ private enum class ProximityTarget(val label: String) {
 
 private enum class MicrophoneTarget(val label: String) {
     TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")
+}
+
+private enum class MicrophoneMode(val label: String, val description: String) {
+    TAP("Tap (3 taps)", "Detects three separate tap-like sounds within 1.5 seconds."),
+    TONE("Tone / music", "Triggers when a sustained loud tone or music is heard; it triggers once per sound episode.")
 }
 
 @Composable
@@ -88,6 +94,7 @@ fun ClockApp() {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
     }
     var microphoneTarget by remember { mutableStateOf(MicrophoneTarget.TIMER) }
+    var microphoneMode by remember { mutableStateOf(MicrophoneMode.TAP) }
     var microphoneError by remember { mutableStateOf<String?>(null) }
 
     val microphonePermissionLauncher = rememberLauncherForActivityResult(
@@ -163,14 +170,15 @@ fun ClockApp() {
         }
     }
 
-    DisposableEffect(context, microphoneEnabled, microphonePermissionGranted) {
+    DisposableEffect(context, microphoneEnabled, microphonePermissionGranted, microphoneMode) {
         if (!microphoneEnabled || !microphonePermissionGranted) {
             onDispose { }
         } else {
             val controller = MicrophoneTapController(
                 context = context,
                 onTripleTap = { latestMicrophoneAction() },
-                onError = { error -> microphoneError = error; microphoneEnabled = false }
+                onError = { error -> microphoneError = error; microphoneEnabled = false },
+                triggerMode = if (microphoneMode == MicrophoneMode.TAP) MicrophoneTriggerMode.TAP else MicrophoneTriggerMode.TONE
             )
             controller.start()
             onDispose { controller.stop() }
@@ -275,6 +283,8 @@ fun ClockApp() {
                             microphonePermissionGranted = microphonePermissionGranted,
                             microphoneTarget = microphoneTarget,
                             onMicrophoneTargetChanged = { microphoneTarget = it },
+                            microphoneMode = microphoneMode,
+                            onMicrophoneModeChanged = { microphoneMode = it },
                             microphoneError = microphoneError
                         )
                     }
@@ -371,6 +381,8 @@ private fun SettingsScreen(
     microphonePermissionGranted: Boolean,
     microphoneTarget: MicrophoneTarget,
     onMicrophoneTargetChanged: (MicrophoneTarget) -> Unit,
+    microphoneMode: MicrophoneMode,
+    onMicrophoneModeChanged: (MicrophoneMode) -> Unit,
     microphoneError: String?
 ) {
     Text("SENSOR SETTINGS", color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
@@ -433,8 +445,8 @@ private fun SettingsScreen(
             Text("Microphone", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(6.dp))
             Text(
-                if (microphonePermissionGranted) "Listens for three distinct tap-like sounds within 1.5 seconds."
-                else "Microphone permission is needed to detect tap-like sounds.",
+                if (microphonePermissionGranted) "Uses the microphone to detect the selected sound trigger."
+                else "Microphone permission is needed to detect sound triggers.",
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
             Spacer(Modifier.height(12.dp))
@@ -444,6 +456,29 @@ private fun SettingsScreen(
                     Text(if (microphoneEnabled) "Turn off" else "Turn on")
                 }
             }
+            Spacer(Modifier.height(16.dp))
+            Text("Activate by", fontWeight = FontWeight.SemiBold)
+            var microphoneModeMenuExpanded by remember { mutableStateOf(false) }
+            Spacer(Modifier.height(6.dp))
+            Button(onClick = { microphoneModeMenuExpanded = true }, enabled = microphoneEnabled) {
+                Text(microphoneMode.label)
+            }
+            DropdownMenu(
+                expanded = microphoneModeMenuExpanded,
+                onDismissRequest = { microphoneModeMenuExpanded = false }
+            ) {
+                MicrophoneMode.entries.forEach { mode ->
+                    DropdownMenuItem(
+                        text = { Text(mode.label) },
+                        onClick = {
+                            onMicrophoneModeChanged(mode)
+                            microphoneModeMenuExpanded = false
+                        }
+                    )
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(microphoneMode.description, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
             Spacer(Modifier.height(16.dp))
             Text("Activate microphone for", fontWeight = FontWeight.SemiBold)
             var microphoneMenuExpanded by remember { mutableStateOf(false) }
@@ -467,7 +502,10 @@ private fun SettingsScreen(
             }
             Spacer(Modifier.height(8.dp))
             Text(
-                "Make three separate taps or tap-like sounds near the phone within 1.5 seconds. This detects sound peaks, not the physical location of the taps.",
+                if (microphoneMode == MicrophoneMode.TAP)
+                    "Make three separate taps or tap-like sounds near the phone within 1.5 seconds. This detects sound peaks, not the physical location of the taps."
+                else
+                    "Play music or a tone aloud near the phone. The trigger uses microphone sound level, not the phone's internal audio stream; loud environmental sounds may also trigger it.",
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
             if (microphoneError != null) {
