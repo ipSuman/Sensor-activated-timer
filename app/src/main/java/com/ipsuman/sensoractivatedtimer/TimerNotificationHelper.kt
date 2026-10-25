@@ -85,7 +85,11 @@ object TimerNotificationHelper {
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle("$clockName running")
-            .setContentText(if (clockName == "Timer") "Time remaining: $timeText" else "Elapsed time: $timeText")
+            .setContentText(when (clockName) {
+                "Timer" -> "Time remaining: $timeText"
+                "Stopwatch" -> "Elapsed time: $timeText"
+                else -> timeText
+            })
             .setOnlyAlertOnce(true)
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
