@@ -761,7 +761,7 @@ private fun SettingsScreen(
             Text("Button Gestures", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(6.dp))
             Text(
-                "Press Volume + and Volume − together within 0.6 seconds to trigger the selected clock.",
+                "Press Volume Down three times within 0.7 seconds to trigger the selected clock.",
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
             Spacer(Modifier.height(12.dp))
@@ -794,7 +794,7 @@ private fun SettingsScreen(
             }
             Spacer(Modifier.height(8.dp))
             Text(
-                if (volumeGestureEnabled) "While enabled, both volume keys are reserved for this gesture; single presses will not change media volume."
+                if (volumeGestureEnabled) "While enabled, Volume Down presses are reserved for this gesture and will not change media volume. Volume Up works normally."
                 else "Turn this off to restore normal volume-button behavior.",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
