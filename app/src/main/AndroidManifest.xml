@@ -3,6 +3,7 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application
+        android:name=".SensorTimerApplication"
         android:allowBackup="true"
         android:label="Sensor Timer"
         android:supportsRtl="true"
