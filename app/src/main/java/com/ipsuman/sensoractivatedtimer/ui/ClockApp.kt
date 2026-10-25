@@ -127,6 +127,8 @@ fun ClockApp() {
     var referenceDurationMs by remember { mutableLongStateOf(microphonePrefs.getLong("reference_duration_ms", 0L)) }
     var intensityTolerance by remember { mutableIntStateOf(microphonePrefs.getInt("intensity_tolerance", 70)) }
     var durationTolerance by remember { mutableIntStateOf(microphonePrefs.getInt("duration_tolerance", 30)) }
+    var pitchTolerance by remember { mutableIntStateOf(microphonePrefs.getInt("pitch_tolerance", 20).coerceIn(0, 100)) }
+    var referencePitchHz by remember { mutableIntStateOf(microphonePrefs.getInt("reference_pitch_hz", 0).coerceAtLeast(0)) }
     var notificationTestMessage by remember { mutableStateOf<String?>(null) }
     val notificationPrefs = remember(context) { context.getSharedPreferences("notification_settings", android.content.Context.MODE_PRIVATE) }
     var notificationsEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("timer_notifications_enabled", false)) }
@@ -261,19 +263,23 @@ fun ClockApp() {
                 triggerMode = if (microphoneMode == MicrophoneMode.RECORDED_SOUND) MicrophoneTriggerMode.RECORDED_SOUND else MicrophoneTriggerMode.TONE,
                 initialReferenceIntensity = referenceIntensity,
                 initialReferenceDurationMs = referenceDurationMs,
+                initialReferencePitchHz = referencePitchHz,
                 intensityTolerancePercent = intensityTolerance,
                 durationTolerancePercent = durationTolerance,
+                pitchTolerancePercent = pitchTolerance,
                 onAudioMetrics = { intensity, pitchHz ->
                     microphoneLevel = intensity.toFloat()
                     microphonePitchHz = pitchHz
                     microphoneHistory = (microphoneHistory + intensity.toFloat()).takeLast(48)
                 },
-                onReferenceSoundChanged = { intensity, durationMs ->
+                onReferenceSoundChanged = { intensity, durationMs, pitchHz ->
                     referenceIntensity = intensity
                     referenceDurationMs = durationMs
+                    referencePitchHz = pitchHz
                     microphonePrefs.edit()
                         .putFloat("reference_intensity", intensity.toFloat())
                         .putLong("reference_duration_ms", durationMs)
+                        .putInt("reference_pitch_hz", pitchHz)
                         .apply()
                     microphoneMessage = "Reference saved: ${durationMs} ms sound duration."
                     microphoneError = null
@@ -442,13 +448,19 @@ fun ClockApp() {
                             intensityTolerance = intensityTolerance,
                             onIntensityToleranceChanged = { value ->
                                 intensityTolerance = value
-                                microphoneController?.updateTolerances(value, durationTolerance)
+                                microphoneController?.updateTolerances(value, durationTolerance, pitchTolerance)
                                 microphonePrefs.edit().putInt("intensity_tolerance", value).apply()
                             },
                             durationTolerance = durationTolerance,
+                            pitchTolerance = pitchTolerance,
+                            onPitchToleranceChanged = { value ->
+                                pitchTolerance = value
+                                microphoneController?.updateTolerances(intensityTolerance, durationTolerance, value)
+                                microphonePrefs.edit().putInt("pitch_tolerance", value).apply()
+                            },
                             onDurationToleranceChanged = { value ->
                                 durationTolerance = value
-                                microphoneController?.updateTolerances(intensityTolerance, value)
+                                microphoneController?.updateTolerances(intensityTolerance, value, pitchTolerance)
                                 microphonePrefs.edit().putInt("duration_tolerance", value).apply()
                             },
                             referenceDurationMs = referenceDurationMs,
@@ -650,6 +662,8 @@ private fun SettingsScreen(
     intensityTolerance: Int,
     onIntensityToleranceChanged: (Int) -> Unit,
     durationTolerance: Int,
+    pitchTolerance: Int,
+    onPitchToleranceChanged: (Int) -> Unit,
     onDurationToleranceChanged: (Int) -> Unit,
     referenceDurationMs: Long,
     onRecordReferenceSound: () -> Unit,
@@ -832,6 +846,16 @@ private fun SettingsScreen(
                     steps = 9
                 )
                 Text("Lower tolerance is more selective; higher tolerance accepts a wider volume range.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                Spacer(Modifier.height(8.dp))
+                Text("Pitch tolerance: ±$pitchTolerance%", fontWeight = FontWeight.SemiBold)
+                Slider(
+                    value = pitchTolerance.toFloat(),
+                    onValueChange = { onPitchToleranceChanged(it.toInt().coerceIn(0, 100)) },
+                    valueRange = 0f..100f,
+                    steps = 9,
+                    enabled = microphoneEnabled
+                )
+                Text("When the recorded sound has a detectable pitch, the live pitch must fall within this percentage of the reference pitch. If no stable reference pitch is detected, pitch matching is skipped.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                 Spacer(Modifier.height(8.dp))
                 Text("Duration tolerance: ±$durationTolerance%", fontWeight = FontWeight.SemiBold)
                 Slider(
