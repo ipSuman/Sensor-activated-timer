@@ -14,6 +14,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -59,6 +61,10 @@ private enum class AppTab(val title: String) {
     TIMER("Timer"), STOPWATCH("Stopwatch"), SETTINGS("Settings")
 }
 
+private enum class ProximityTarget(val label: String) {
+    TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")
+}
+
 @Composable
 fun ClockApp() {
     var selectedTab by remember { mutableStateOf(AppTab.TIMER) }
@@ -70,15 +76,33 @@ fun ClockApp() {
     var stopwatchMillis by remember { mutableLongStateOf(0L) }
     var proximityAvailable by remember { mutableStateOf(true) }
     var proximityEnabled by remember { mutableStateOf(true) }
+    var proximityTarget by remember { mutableStateOf(ProximityTarget.TIMER) }
 
-    val latestTimerState by rememberUpdatedState(
-        Triple(timerRunning, remainingSeconds, durationInput.toIntOrNull() ?: 0)
-    )
-    val latestStartTimer by rememberUpdatedState<() -> Unit>({
-        val state = latestTimerState
-        if (!state.first && state.second == 0 && state.third > 0) {
-            remainingSeconds = state.third.coerceAtMost(24 * 60 * 60)
-            timerRunning = true
+    // Covering the sensor toggles the selected clock: running clocks pause, paused clocks resume.
+    val latestProximityAction by rememberUpdatedState<() -> Unit>({
+        when (proximityTarget) {
+            ProximityTarget.TIMER -> {
+                if (timerRunning) {
+                    timerRunning = false
+                } else {
+                    if (remainingSeconds == 0) {
+                        remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
+                    }
+                    timerRunning = remainingSeconds > 0
+                }
+            }
+            ProximityTarget.STOPWATCH -> stopwatchRunning = !stopwatchRunning
+            ProximityTarget.BOTH -> {
+                if (timerRunning) {
+                    timerRunning = false
+                } else {
+                    if (remainingSeconds == 0) {
+                        remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
+                    }
+                    timerRunning = remainingSeconds > 0
+                }
+                stopwatchRunning = !stopwatchRunning
+            }
         }
     })
     val context = LocalContext.current
@@ -89,7 +113,7 @@ fun ClockApp() {
         } else {
             val controller = ProximitySensorController(
                 context = context,
-                onCovered = { latestStartTimer() },
+                onCovered = { latestProximityAction() },
                 onAvailabilityChanged = { proximityAvailable = it }
             )
             controller.start()
@@ -180,7 +204,9 @@ fun ClockApp() {
                         AppTab.SETTINGS -> SettingsScreen(
                             proximityEnabled = proximityEnabled,
                             onProximityChanged = { proximityEnabled = it },
-                            proximityAvailable = proximityAvailable
+                            proximityAvailable = proximityAvailable,
+                            proximityTarget = proximityTarget,
+                            onProximityTargetChanged = { proximityTarget = it }
                         )
                     }
                 }
@@ -231,7 +257,7 @@ private fun TimerScreen(
     }
     Spacer(Modifier.height(18.dp))
     Text(
-        "Proximity trigger: cover your phone's proximity sensor to start the configured countdown.",
+        "Use the proximity setting to choose whether covering the sensor controls the timer, stopwatch, or both.",
         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
     )
 }
@@ -268,7 +294,9 @@ private fun StopwatchScreen(
 private fun SettingsScreen(
     proximityEnabled: Boolean,
     onProximityChanged: (Boolean) -> Unit,
-    proximityAvailable: Boolean
+    proximityAvailable: Boolean,
+    proximityTarget: ProximityTarget,
+    onProximityTargetChanged: (ProximityTarget) -> Unit
 ) {
     Text("SENSOR SETTINGS", color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
     Spacer(Modifier.height(14.dp))
@@ -292,6 +320,32 @@ private fun SettingsScreen(
                     Text(if (proximityEnabled) "Turn off" else "Turn on")
                 }
             }
+            Spacer(Modifier.height(16.dp))
+            Text("Activate proximity for", fontWeight = FontWeight.SemiBold)
+            var targetMenuExpanded by remember { mutableStateOf(false) }
+            Spacer(Modifier.height(6.dp))
+            Button(onClick = { targetMenuExpanded = true }, enabled = proximityEnabled) {
+                Text(proximityTarget.label)
+            }
+            DropdownMenu(
+                expanded = targetMenuExpanded,
+                onDismissRequest = { targetMenuExpanded = false }
+            ) {
+                ProximityTarget.entries.forEach { target ->
+                    DropdownMenuItem(
+                        text = { Text(target.label) },
+                        onClick = {
+                            onProximityTargetChanged(target)
+                            targetMenuExpanded = false
+                        }
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Cover the sensor to start or pause the selected clock. Cover it again to resume.",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
         }
     }
     Spacer(Modifier.height(16.dp))
