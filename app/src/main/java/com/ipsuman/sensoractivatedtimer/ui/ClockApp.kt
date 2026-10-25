@@ -196,7 +196,7 @@ fun ClockApp() {
         }
     }
 
-    DisposableEffect(context, microphoneEnabled, microphonePermissionGranted, microphoneMode, intensityTolerance, durationTolerance) {
+    DisposableEffect(context, microphoneEnabled, microphonePermissionGranted, microphoneMode) {
         if (!microphoneEnabled || !microphonePermissionGranted) {
             onDispose { }
         } else {
@@ -370,11 +370,13 @@ fun ClockApp() {
                             intensityTolerance = intensityTolerance,
                             onIntensityToleranceChanged = { value ->
                                 intensityTolerance = value
+                                microphoneController?.updateTolerances(value, durationTolerance)
                                 microphonePrefs.edit().putInt("intensity_tolerance", value).apply()
                             },
                             durationTolerance = durationTolerance,
                             onDurationToleranceChanged = { value ->
                                 durationTolerance = value
+                                microphoneController?.updateTolerances(intensityTolerance, value)
                                 microphonePrefs.edit().putInt("duration_tolerance", value).apply()
                             },
                             referenceDurationMs = referenceDurationMs,
