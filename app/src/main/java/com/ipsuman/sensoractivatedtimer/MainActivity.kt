@@ -13,29 +13,32 @@ import com.ipsuman.sensoractivatedtimer.ui.ClockApp
 
 class MainActivity : ComponentActivity() {
     private var volumeGestureHandler: (() -> Unit)? = null
-    private var firstVolumeKeyCode: Int? = null
-    private var firstVolumeKeyDownAt: Long = 0L
+    private var volumeDownPressCount = 0
+    private var firstVolumeDownAt: Long = 0L
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val gestureEnabled = getSharedPreferences("button_gesture_settings", MODE_PRIVATE)
             .getBoolean("enabled", false)
-        val isVolumeKey = event.keyCode == KeyEvent.KEYCODE_VOLUME_UP ||
-            event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
-        if (!gestureEnabled || !isVolumeKey) return super.dispatchKeyEvent(event)
+        if (!gestureEnabled || event.keyCode != KeyEvent.KEYCODE_VOLUME_DOWN) {
+            return super.dispatchKeyEvent(event)
+        }
 
         if (event.action == KeyEvent.ACTION_DOWN) {
             if (event.repeatCount > 0) return true
             val now = SystemClock.elapsedRealtime()
-            val firstKey = firstVolumeKeyCode
-            if (firstKey == null || now - firstVolumeKeyDownAt > 600L || firstKey == event.keyCode) {
-                firstVolumeKeyCode = event.keyCode
-                firstVolumeKeyDownAt = now
+            if (volumeDownPressCount == 0 || now - firstVolumeDownAt > 700L) {
+                volumeDownPressCount = 1
+                firstVolumeDownAt = now
             } else {
-                firstVolumeKeyCode = null
-                firstVolumeKeyDownAt = 0L
+                volumeDownPressCount++
+            }
+
+            if (volumeDownPressCount >= 3) {
+                volumeDownPressCount = 0
+                firstVolumeDownAt = 0L
                 try {
                     volumeGestureHandler?.invoke()
-                    CrashLogger.log("Volume-button gesture triggered")
+                    CrashLogger.log("Three-press Volume Down gesture triggered")
                 } catch (error: Throwable) {
                     CrashLogger.log("Volume-button gesture handler failed", error)
                 }
