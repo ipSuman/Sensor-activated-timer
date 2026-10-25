@@ -3,6 +3,8 @@ package com.ipsuman.sensoractivatedtimer.ui
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import android.content.Intent
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -76,7 +78,7 @@ private enum class MicrophoneTarget(val label: String) {
 }
 
 private enum class MicrophoneMode(val label: String, val description: String) {
-    TAP("Tap (3 taps)", "Detects three separate tap-like sounds within 1.5 seconds."),
+    RECORDED_SOUND("Recorded sound", "Record a sound, then trigger when the live microphone intensity is within ±70% of its recorded intensity."),
     TONE("Tone / music", "Triggers when a sustained loud tone or music is heard; it triggers once per sound episode.")
 }
 
@@ -98,8 +100,13 @@ fun ClockApp() {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
     }
     var microphoneTarget by remember { mutableStateOf(MicrophoneTarget.TIMER) }
-    var microphoneMode by remember { mutableStateOf(MicrophoneMode.TAP) }
+    var microphoneMode by remember { mutableStateOf(MicrophoneMode.RECORDED_SOUND) }
     var microphoneError by remember { mutableStateOf<String?>(null) }
+    var microphoneMessage by remember { mutableStateOf<String?>(null) }
+    var microphoneController by remember { mutableStateOf<MicrophoneTapController?>(null) }
+    val microphonePrefs = remember(context) { context.getSharedPreferences("microphone_settings", android.content.Context.MODE_PRIVATE) }
+    var referenceIntensity by remember { mutableStateOf(microphonePrefs.getFloat("reference_intensity", 0f).toDouble()) }
+    var notificationTestMessage by remember { mutableStateOf<String?>(null) }
     val notificationPrefs = remember(context) { context.getSharedPreferences("notification_settings", android.content.Context.MODE_PRIVATE) }
     var notificationsEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("timer_notifications_enabled", false)) }
     var notificationPermissionGranted by remember { mutableStateOf(TimerNotificationHelper.hasPermission(context)) }
@@ -193,10 +200,21 @@ fun ClockApp() {
                 context = context,
                 onTripleTap = { latestMicrophoneAction() },
                 onError = { error -> microphoneError = error; microphoneEnabled = false },
-                triggerMode = if (microphoneMode == MicrophoneMode.TAP) MicrophoneTriggerMode.TAP else MicrophoneTriggerMode.TONE
+                triggerMode = if (microphoneMode == MicrophoneMode.RECORDED_SOUND) MicrophoneTriggerMode.RECORDED_SOUND else MicrophoneTriggerMode.TONE,
+                initialReferenceIntensity = referenceIntensity,
+                onReferenceIntensityChanged = { intensity ->
+                    referenceIntensity = intensity
+                    microphonePrefs.edit().putFloat("reference_intensity", intensity.toFloat()).apply()
+                    microphoneMessage = "Reference sound saved. Matching intensity window: ±70%."
+                    microphoneError = null
+                }
             )
+            microphoneController = controller
             controller.start()
-            onDispose { controller.stop() }
+            onDispose {
+                controller.stop()
+                if (microphoneController === controller) microphoneController = null
+            }
         }
     }
 
@@ -208,6 +226,11 @@ fun ClockApp() {
     }
 
     LaunchedEffect(timerRunning) {
+        if (timerRunning && remainingSeconds > 0) {
+            TimerNotificationHelper.scheduleTimerComplete(context, remainingSeconds)
+        } else {
+            TimerNotificationHelper.cancelTimerComplete(context)
+        }
         while (timerRunning && remainingSeconds > 0) {
             delay(1000)
             remainingSeconds = (remainingSeconds - 1).coerceAtLeast(0)
@@ -306,8 +329,27 @@ fun ClockApp() {
                             microphoneMode = microphoneMode,
                             onMicrophoneModeChanged = { microphoneMode = it },
                             microphoneError = microphoneError,
+                            microphoneMessage = microphoneMessage,
+                            referenceIntensitySaved = referenceIntensity > 100.0,
+                            onRecordReferenceSound = {
+                                microphoneMessage = "Recording reference for 2 seconds — make the trigger sound now."
+                                microphoneError = null
+                                microphoneController?.recordReferenceSound()
+                            },
                             notificationsEnabled = notificationsEnabled,
                             notificationPermissionGranted = notificationPermissionGranted,
+                            onTestNotification = {
+                                val shown = TimerNotificationHelper.showTimerComplete(context, test = true)
+                                notificationTestMessage = if (shown) "Test notification sent. Check your notification shade." else "Notification blocked. Check Android notification permission and the Timer alerts channel in system settings."
+                            },
+                            onOpenNotificationSettings = {
+                                val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                    putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                context.startActivity(intent)
+                            },
+                            notificationTestMessage = notificationTestMessage,
                             onNotificationsChanged = { enabled ->
                                 if (!enabled) {
                                     notificationsEnabled = false
@@ -418,8 +460,14 @@ private fun SettingsScreen(
     microphoneMode: MicrophoneMode,
     onMicrophoneModeChanged: (MicrophoneMode) -> Unit,
     microphoneError: String?,
+    microphoneMessage: String?,
+    referenceIntensitySaved: Boolean,
+    onRecordReferenceSound: () -> Unit,
     notificationsEnabled: Boolean,
     notificationPermissionGranted: Boolean,
+    onTestNotification: () -> Unit,
+    onOpenNotificationSettings: () -> Unit,
+    notificationTestMessage: String?,
     onNotificationsChanged: (Boolean) -> Unit
 ) {
     Text("SENSOR SETTINGS", color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
@@ -516,6 +564,21 @@ private fun SettingsScreen(
             }
             Spacer(Modifier.height(6.dp))
             Text(microphoneMode.description, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+            if (microphoneMode == MicrophoneMode.RECORDED_SOUND) {
+                Spacer(Modifier.height(12.dp))
+                Button(onClick = onRecordReferenceSound, enabled = microphoneEnabled) {
+                    Text(if (referenceIntensitySaved) "Record sound again" else "Record trigger sound")
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    if (referenceIntensitySaved) "A reference intensity is saved. Tap to record a new reference; make the sound for the full 2 seconds." else "Turn on the microphone, tap Record trigger sound, then make your chosen sound for 2 seconds.",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+                if (microphoneMessage != null) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(microphoneMessage, color = MaterialTheme.colorScheme.primary)
+                }
+            }
             Spacer(Modifier.height(16.dp))
             Text("Activate microphone for", fontWeight = FontWeight.SemiBold)
             var microphoneMenuExpanded by remember { mutableStateOf(false) }
@@ -539,8 +602,8 @@ private fun SettingsScreen(
             }
             Spacer(Modifier.height(8.dp))
             Text(
-                if (microphoneMode == MicrophoneMode.TAP)
-                    "Make three separate taps or tap-like sounds near the phone within 1.5 seconds. This detects sound peaks, not the physical location of the taps."
+                if (microphoneMode == MicrophoneMode.RECORDED_SOUND)
+                    "When listening, the trigger fires when the microphone RMS intensity enters 30%–170% of the saved reference intensity. Background noise and microphone distance can affect matching."
                 else
                     "Play music or a tone aloud near the phone. The trigger uses microphone sound level, not the phone's internal audio stream; loud environmental sounds may also trigger it.",
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
@@ -579,6 +642,15 @@ private fun SettingsScreen(
                 Button(onClick = { onNotificationsChanged(!notificationsEnabled) }) {
                     Text(if (notificationsEnabled) "Turn off" else "Turn on")
                 }
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onTestNotification) { Text("Test notification") }
+                Button(onClick = onOpenNotificationSettings) { Text("System settings") }
+            }
+            if (notificationTestMessage != null) {
+                Spacer(Modifier.height(6.dp))
+                Text(notificationTestMessage, color = MaterialTheme.colorScheme.primary)
             }
         }
     }
