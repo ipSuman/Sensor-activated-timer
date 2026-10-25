@@ -247,7 +247,7 @@ fun ClockApp() {
 
     DisposableEffect(context, accelerometerEnabled, accelerometerSensitivity) {
         if (!accelerometerEnabled) {
-            accelerometerAvailable = (context.getSystemService(Context.SENSOR_SERVICE) as android.hardware.SensorManager)
+            accelerometerAvailable = (context.getSystemService(android.content.Context.SENSOR_SERVICE) as android.hardware.SensorManager)
                 .getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER) != null
             onDispose { }
         } else {
