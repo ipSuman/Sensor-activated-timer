@@ -527,6 +527,8 @@ private fun SensorStatusPanel(
                 Text("Intensity (RMS): ${microphoneLevel.toInt()}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
                 Text("Intensity ↑", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                val graphOutlineColor = MaterialTheme.colorScheme.outline
+                val graphPrimaryColor = MaterialTheme.colorScheme.primary
                 Canvas(Modifier.fillMaxWidth().height(120.dp)) {
                     val values = microphoneHistory
                     val left = 8f
@@ -535,8 +537,8 @@ private fun SensorStatusPanel(
                     val bottom = size.height - 22f
                     val graphHeight = bottom - top
                     val graphWidth = right - left
-                    drawLine(MaterialTheme.colorScheme.outline, Offset(left, top), Offset(left, bottom), strokeWidth = 1.dp.toPx())
-                    drawLine(MaterialTheme.colorScheme.outline, Offset(left, bottom), Offset(right, bottom), strokeWidth = 1.dp.toPx())
+                    drawLine(graphOutlineColor, Offset(left, top), Offset(left, bottom), strokeWidth = 1.dp.toPx())
+                    drawLine(graphOutlineColor, Offset(left, bottom), Offset(right, bottom), strokeWidth = 1.dp.toPx())
                     if (values.size > 1) {
                         val maxValue = maxOf(values.maxOrNull() ?: 1f, 1f)
                         val path = Path()
@@ -545,7 +547,7 @@ private fun SensorStatusPanel(
                             val y = bottom - (value / maxValue).coerceIn(0f, 1f) * graphHeight
                             if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
                         }
-                        drawPath(path, color = MaterialTheme.colorScheme.primary, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+                        drawPath(path, color = graphPrimaryColor, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
                     }
                 }
                 Text("Time →", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.End))
