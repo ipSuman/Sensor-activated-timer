@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ipsuman.sensoractivatedtimer.TimerNotificationHelper
 import com.ipsuman.sensoractivatedtimer.sensor.ProximitySensorController
+import com.ipsuman.sensoractivatedtimer.sensor.AccelerometerController
 import com.ipsuman.sensoractivatedtimer.sensor.MicrophoneTapController
 import com.ipsuman.sensoractivatedtimer.sensor.MicrophoneTriggerMode
 import kotlinx.coroutines.delay
@@ -74,7 +75,7 @@ private enum class ProximityTarget(val label: String) {
     TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")
 }
 
-private enum class MicrophoneTarget(val label: String) {
+private enum class AccelerometerTarget(val label: String) {\n    TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")\n}\n\nprivate enum class MicrophoneTarget(val label: String) {
     TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")
 }
 
@@ -163,6 +164,25 @@ fun ClockApp() {
             }
         }
     })
+    val latestAccelerometerAction by rememberUpdatedState<() -> Unit>({
+        when (accelerometerTarget) {
+            AccelerometerTarget.TIMER -> {
+                if (timerRunning) timerRunning = false else {
+                    if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
+                    timerRunning = remainingSeconds > 0
+                }
+            }
+            AccelerometerTarget.STOPWATCH -> stopwatchRunning = !stopwatchRunning
+            AccelerometerTarget.BOTH -> {
+                if (timerRunning) timerRunning = false else {
+                    if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
+                    timerRunning = remainingSeconds > 0
+                }
+                stopwatchRunning = !stopwatchRunning
+            }
+        }
+    })
+
     val latestMicrophoneAction by rememberUpdatedState<() -> Unit>({
         when (microphoneTarget) {
             MicrophoneTarget.TIMER -> {
@@ -190,6 +210,23 @@ fun ClockApp() {
                 context = context,
                 onCovered = { latestProximityAction() },
                 onAvailabilityChanged = { proximityAvailable = it }
+            )
+            controller.start()
+            onDispose { controller.stop() }
+        }
+    }
+
+    DisposableEffect(context, accelerometerEnabled, accelerometerSensitivity) {
+        if (!accelerometerEnabled) {
+            accelerometerAvailable = (context.getSystemService(Context.SENSOR_SERVICE) as android.hardware.SensorManager)
+                .getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER) != null
+            onDispose { }
+        } else {
+            val controller = AccelerometerController(
+                context = context,
+                sensitivity = accelerometerSensitivity,
+                onShake = { latestAccelerometerAction() },
+                onAvailabilityChanged = { accelerometerAvailable = it }
             )
             controller.start()
             onDispose { controller.stop() }
