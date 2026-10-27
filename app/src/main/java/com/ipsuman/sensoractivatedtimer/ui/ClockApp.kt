@@ -39,7 +39,6 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -59,9 +58,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ipsuman.sensoractivatedtimer.TimerNotificationHelper
 import com.ipsuman.sensoractivatedtimer.sensor.MicrophoneTapController
-import kotlinx.coroutines.delay
 
 private val DarkColors = darkColorScheme()
 private val LightColors = lightColorScheme()
@@ -331,51 +328,17 @@ fun ClockApp(
 
     ClockTimeEffect(onTimeChanged = { currentTime = it })
 
-    LaunchedEffect(timerRunning, notificationsEnabled, notificationPermissionGranted) {
-        if (timerRunning && notificationsEnabled && notificationPermissionGranted && remainingSeconds > 0) {
-            TimerNotificationHelper.scheduleTimerComplete(context, remainingSeconds)
-        } else {
-            TimerNotificationHelper.cancelTimerComplete(context)
-        }
-    }
-
-    LaunchedEffect(timerRunning) {
-        while (timerRunning && remainingSeconds > 0) {
-            delay(1000)
-            remainingSeconds = (remainingSeconds - 1).coerceAtLeast(0)
-            if (remainingSeconds == 0) {
-                timerRunning = false
-                if (notificationsEnabled && notificationPermissionGranted) {
-                    TimerNotificationHelper.showTimerComplete(context)
-                }
-            }
-        }
-    }
-
-    ClockStopwatchEffect(running = stopwatchRunning) { elapsed -> stopwatchMillis += elapsed }
-
-
-    LaunchedEffect(timerRunning, stopwatchRunning, notificationsEnabled, notificationPermissionGranted) {
-        if (!notificationsEnabled || !notificationPermissionGranted || (!timerRunning && !stopwatchRunning)) {
-            TimerNotificationHelper.cancelClockStatus(context)
-        } else {
-            while (notificationsEnabled && notificationPermissionGranted && (timerRunning || stopwatchRunning)) {
-                val timerText = formatTime(remainingSeconds)
-                val stopwatchText = formatStopwatch(stopwatchMillis)
-                when {
-                    timerRunning && stopwatchRunning -> TimerNotificationHelper.showClockStatus(
-                        context,
-                        "Timer & Stopwatch",
-                        "Timer: $timerText remaining • Stopwatch: $stopwatchText elapsed"
-                    )
-                    timerRunning -> TimerNotificationHelper.showClockStatus(context, "Timer", timerText)
-                    stopwatchRunning -> TimerNotificationHelper.showClockStatus(context, "Stopwatch", stopwatchText)
-                }
-                delay(1000)
-            }
-            TimerNotificationHelper.cancelClockStatus(context)
-        }
-    }
+    ClockTimerEffects(
+        context = context,
+        timerRunning = timerRunning,
+        remainingSeconds = remainingSeconds,
+        onRemainingSecondsChanged = { remainingSeconds = it },
+        onTimerRunningChanged = { timerRunning = it },
+        stopwatchRunning = stopwatchRunning,
+        stopwatchMillis = stopwatchMillis,
+        notificationsEnabled = notificationsEnabled,
+        notificationPermissionGranted = notificationPermissionGranted
+    )
 
     val colors = if (isSystemInDarkTheme()) DarkColors else LightColors
     MaterialTheme(colorScheme = colors) {
