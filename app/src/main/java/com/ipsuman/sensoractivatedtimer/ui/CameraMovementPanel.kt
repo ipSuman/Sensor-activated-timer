@@ -41,9 +41,8 @@ internal fun CameraMovementPanel(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val previewView = remember { PreviewView(context).apply { scaleType = PreviewView.ScaleType.FILL_CENTER } }
-    val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
-
     DisposableEffect(lifecycleOwner, frontCamera, previewView) {
+        val analysisExecutor = Executors.newSingleThreadExecutor()
         val providerFuture = ProcessCameraProvider.getInstance(context)
         val mainExecutor = ContextCompat.getMainExecutor(context)
         var provider: ProcessCameraProvider? = null
