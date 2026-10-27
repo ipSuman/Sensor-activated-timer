@@ -123,6 +123,10 @@ internal fun SensorStatusPanel(
 }
 @Composable
 internal fun TimerScreen(
+    cameraEnabled: Boolean,
+    cameraFront: Boolean,
+    onToggleCamera: () -> Unit,
+    onCameraMovement: () -> Unit,
     durationInput: String,
     onDurationChange: (String) -> Unit,
     remainingSeconds: Int,
@@ -143,6 +147,7 @@ internal fun TimerScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(formatTime(remainingSeconds), fontSize = 48.sp, fontWeight = FontWeight.Bold)
+            if (cameraEnabled) CameraMovementPanel(cameraFront, onToggleCamera, onCameraMovement)
             Spacer(Modifier.height(18.dp))
             OutlinedTextField(
                 value = durationInput,
@@ -165,6 +170,10 @@ internal fun TimerScreen(
 
 @Composable
 internal fun StopwatchScreen(
+    cameraEnabled: Boolean,
+    cameraFront: Boolean,
+    onToggleCamera: () -> Unit,
+    onCameraMovement: () -> Unit,
     elapsedMillis: Long,
     running: Boolean,
     sensorListeningIntervalMs: Int,
@@ -184,6 +193,7 @@ internal fun StopwatchScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(formatStopwatch(elapsedMillis), fontSize = 38.sp, fontWeight = FontWeight.Bold)
+            if (cameraEnabled) CameraMovementPanel(cameraFront, onToggleCamera, onCameraMovement)
             Spacer(Modifier.height(24.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = onToggle) { Text(if (running) "Pause" else "Start") }
