@@ -87,6 +87,12 @@ fun ClockApp(
         historyEntries = (listOf(ClockHistoryEntry(System.currentTimeMillis(), kind, reading)) + historyEntries).take(200)
         saveClockHistory(context, historyEntries)
     }
+    fun recordTimerResetReading() {
+        if (remainingSeconds > 0) recordHistory("Timer", formatTime(remainingSeconds))
+    }
+    fun recordStopwatchResetReading() {
+        if (stopwatchMillis > 0L) recordHistory("Stopwatch", formatStopwatch(stopwatchMillis))
+    }
     fun deleteHistoryDate(date: String) {
         historyEntries = historyEntries.filterNot { it.dateLabel() == date }
         saveClockHistory(context, historyEntries)
@@ -154,7 +160,8 @@ fun ClockApp(
         when (selectedTab) {
             AppTab.TIMER -> {
                 if (reset && timerRunning) {
-                    // Reset a running countdown to its configured duration, not merely pause it.
+                    // Save the latest countdown reading before resetting it.
+                    recordTimerResetReading()
                     timerRunning = false
                     remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
                 } else if (timerRunning) {
@@ -166,6 +173,8 @@ fun ClockApp(
             }
             AppTab.STOPWATCH -> {
                 if (reset && stopwatchRunning) {
+                    // Save the latest elapsed reading before resetting the stopwatch.
+                    recordStopwatchResetReading()
                     stopwatchRunning = false
                     stopwatchMillis = 0L
                 } else {
@@ -260,7 +269,8 @@ fun ClockApp(
             when (clock) {
                 ClockTriggerTarget.TIMER -> {
                     if (resetOnSensorTrigger && timerRunning) {
-                        // Reset a running countdown to its configured duration, not merely pause it.
+                        // Save the latest countdown reading before resetting it.
+                        recordTimerResetReading()
                         timerRunning = false
                         remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
                     } else if (timerRunning) {
@@ -272,6 +282,8 @@ fun ClockApp(
                 }
                 ClockTriggerTarget.STOPWATCH -> {
                     if (resetOnSensorTrigger && stopwatchRunning) {
+                        // Save the latest elapsed reading before resetting the stopwatch.
+                        recordStopwatchResetReading()
                         stopwatchRunning = false
                         stopwatchMillis = 0L
                     } else {
