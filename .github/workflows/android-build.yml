@@ -2,7 +2,7 @@ name: Android build and signed release
 
 on:
   push:
-    branches: [main]
+    branches: [main, sensor-fusion]
     tags: ["v*"]
   pull_request:
     branches: [main]
