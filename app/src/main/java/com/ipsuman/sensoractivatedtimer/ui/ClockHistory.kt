@@ -13,6 +13,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -48,7 +49,11 @@ internal fun saveClockHistory(context: Context, entries: List<ClockHistoryEntry>
 }
 
 @Composable
-internal fun ClockHistoryPanel(entries: List<ClockHistoryEntry>, onDeleteDate: (String) -> Unit) {
+internal fun ClockHistoryPanel(
+    entries: List<ClockHistoryEntry>,
+    onDeleteDate: (String) -> Unit,
+    onDeleteEntry: (ClockHistoryEntry) -> Unit
+) {
     if (entries.isEmpty()) return
     Spacer(Modifier.height(18.dp))
     Text("HISTORY", color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
@@ -61,7 +66,17 @@ internal fun ClockHistoryPanel(entries: List<ClockHistoryEntry>, onDeleteDate: (
                     Button(onClick = { onDeleteDate(date) }) { Text("Delete day") }
                 }
                 dayEntries.forEach { entry ->
-                    Text("${entry.timeLabel()}  •  ${entry.reading}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "${entry.timeLabel()}  •  ${entry.reading}",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = { onDeleteEntry(entry) }) { Text("Delete") }
+                    }
                 }
             }
         }
