@@ -10,7 +10,7 @@ import kotlin.math.sqrt
 
 /**
  * Detects a deliberate shake using acceleration changes (gravity removed approximately
- * by comparing magnitude to Earth's gravity). Sensitivity 1..10: higher is more sensitive.
+ * by comparing magnitude to Earth's gravity). Sensitivity 1..10: higher is more sensitive, with an exponential threshold curve.
  */
 class AccelerometerController(
     context: Context,
@@ -40,7 +40,10 @@ class AccelerometerController(
         val z = event.values[2]
         val magnitude = sqrt(x * x + y * y + z * z)
         val deviation = kotlin.math.abs(magnitude - SensorManager.GRAVITY_EARTH)
-        val threshold = (4.2f - (sensitivity.coerceIn(1, 10) - 1) * 0.28f).coerceAtLeast(1.7f)
+        // Exponential threshold: level 1 requires a strong ~10 m/s² deviation;
+        // level 10 detects much gentler movement (~1.7 m/s²).
+        val level = (sensitivity.coerceIn(1, 10) - 1) / 9f
+        val threshold = 10f * Math.pow((1.7f / 10f).toDouble(), level.toDouble()).toFloat()
         val now = SystemClock.elapsedRealtime()
 
         if (deviation >= threshold) {
