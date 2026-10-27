@@ -108,12 +108,13 @@ fun ClockApp(
         mutableStateOf(VolumeGestureTarget.entries.getOrElse(volumeGesturePrefs.getInt("target", 0)) { VolumeGestureTarget.TIMER })
     }
     var selectedTab by remember { mutableStateOf(AppTab.TIMER) }
-    var currentTime by remember { mutableStateOf(LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"))) }
-    var durationInput by remember { mutableStateOf("60") }
-    var remainingSeconds by remember { mutableIntStateOf(0) }
-    var timerRunning by remember { mutableStateOf(false) }
-    var stopwatchRunning by remember { mutableStateOf(false) }
-    var stopwatchMillis by remember { mutableLongStateOf(0L) }
+    val clockState = remember { ClockAppState() }
+    var currentTime by clockState.currentTime
+    var durationInput by clockState.durationInput
+    var remainingSeconds by clockState.remainingSeconds
+    var timerRunning by clockState.timerRunning
+    var stopwatchRunning by clockState.stopwatchRunning
+    var stopwatchMillis by clockState.stopwatchMillis
     var proximityAvailable by remember { mutableStateOf(true) }
     var proximityDistanceCm by remember { mutableStateOf<Float?>(null) }
     var microphoneLevel by remember { mutableStateOf(0f) }
