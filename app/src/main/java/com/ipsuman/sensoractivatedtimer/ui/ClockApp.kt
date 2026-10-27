@@ -8,8 +8,6 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -342,6 +340,11 @@ fun ClockApp(
 
     ClockTimeEffect(onTimeChanged = { currentTime = it })
 
+    ClockStopwatchEffect(
+        running = stopwatchRunning,
+        onTick = { deltaMillis -> stopwatchMillis += deltaMillis }
+    )
+
     ClockTimerEffects(
         context = context,
         timerRunning = timerRunning,
@@ -389,8 +392,7 @@ fun ClockApp(
                     modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(20.dp),
                     verticalArrangement = Arrangement.Top
                 ) {
-                    Crossfade(targetState = selectedTab, animationSpec = tween(180), label = "tab-content") { tab ->
-                        when (tab) {
+                    when (selectedTab) {
                         AppTab.TIMER -> Column {
                             SensorStatusPanel(microphoneEnabled && microphonePermissionGranted, microphoneHistory, microphoneSpectrum, microphoneSpectrumMode, { microphoneSpectrumMode = !microphoneSpectrumMode }, microphoneLevel, microphonePitchHz, proximityEnabled && proximityAvailable, proximityDistanceCm, accelerometerEnabled && accelerometerAvailable)
                             TimerScreen(
@@ -533,7 +535,6 @@ fun ClockApp(
                                 }
                             }
                         )
-                    }
                     }
                 }
             }
