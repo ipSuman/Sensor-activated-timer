@@ -34,6 +34,7 @@ class MicrophoneTapController(
     private val onSpectrumMetrics: (List<Float>) -> Unit = {},
     private val onReferenceSoundChanged: (Double, Long, Int) -> Unit = { _, _, _ -> },
     private val holdWhileToneActive: Boolean = false,
+    private val holdPitchMode: Boolean = false,
     private val onToneActivityChanged: (Boolean) -> Unit = {},
     initialToneMinimumIntensity: Int = 1800
 ) {
@@ -201,7 +202,16 @@ class MicrophoneTapController(
                                 // Require 250 ms of sustained sound to activate. In hold mode,
                                 // release the timer as soon as the signal drops below the release
                                 // threshold; normal trigger mode retains its one-shot behavior.
-                                if (rms >= threshold) {
+                                val pitchReference = referencePitchHz
+                                val pitchTolerance = pitchTolerancePercent.coerceIn(0, 100) / 100.0
+                                val pitchMatches = pitchReference > 0 && pitchHz > 0 &&
+                                    pitchHz.toDouble() in (pitchReference * (1.0 - pitchTolerance))..(pitchReference * (1.0 + pitchTolerance))
+                                val signalMatches = if (holdWhileToneActive && holdPitchMode) {
+                                    rms >= maxOf(500.0, noiseFloor * 1.5) && pitchMatches
+                                } else {
+                                    rms >= threshold
+                                }
+                                if (signalMatches) {
                                     lastLoudAt = now
                                     if (toneStartedAt == 0L) toneStartedAt = now
                                     if (!toneTriggered && now - toneStartedAt >= 250L) {
@@ -213,7 +223,7 @@ class MicrophoneTapController(
                                             mainHandler.post { if (running) onTripleTap() }
                                         }
                                     }
-                                } else if (rms < threshold * 0.65) {
+                                } else if ((holdWhileToneActive && holdPitchMode) || rms < threshold * 0.65) {
                                     if (toneActivityActive) {
                                         toneActivityActive = false
                                         mainHandler.post { onToneActivityChanged(false) }
