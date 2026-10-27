@@ -76,7 +76,7 @@ fun ClockApp(
     val volumeGesturePrefs = remember(context) { context.getSharedPreferences("button_gesture_settings", android.content.Context.MODE_PRIVATE) }
     var volumeGestureEnabled by remember { mutableStateOf(volumeGesturePrefs.getBoolean("enabled", false)) }
     var volumeGestureTarget by remember {
-        mutableStateOf(VolumeGestureTarget.entries.getOrElse(volumeGesturePrefs.getInt("target", 0)) { VolumeGestureTarget.TIMER })
+        mutableStateOf(VolumeGestureTarget.entries.getOrElse(volumeGesturePrefs.getInt("target", VolumeGestureTarget.ACTIVE_WINDOW.ordinal)) { VolumeGestureTarget.ACTIVE_WINDOW })
     }
     var selectedTab by remember { mutableStateOf(AppTab.TIMER) }
     val sensorActionPrefs = remember(context) { context.getSharedPreferences("sensor_action_settings", android.content.Context.MODE_PRIVATE) }
@@ -110,17 +110,18 @@ fun ClockApp(
     var microphoneSpectrum by remember { mutableStateOf<List<Float>>(emptyList()) }
     var microphoneSpectrumMode by remember { mutableStateOf(false) }
     var proximityEnabled by remember { mutableStateOf(true) }
-    var proximityTarget by remember { mutableStateOf(ProximityTarget.TIMER) }
+    val proximityPrefs = remember(context) { context.getSharedPreferences("proximity_settings", android.content.Context.MODE_PRIVATE) }
+    var proximityTarget by remember { mutableStateOf(ProximityTarget.entries.getOrElse(proximityPrefs.getInt("target", ProximityTarget.ACTIVE_WINDOW.ordinal)) { ProximityTarget.ACTIVE_WINDOW }) }
     var accelerometerAvailable by remember { mutableStateOf(true) }
     val accelerometerPrefs = remember(context) { context.getSharedPreferences("accelerometer_settings", android.content.Context.MODE_PRIVATE) }
     var accelerometerEnabled by remember { mutableStateOf(accelerometerPrefs.getBoolean("enabled", false)) }
-    var accelerometerTarget by remember { mutableStateOf(AccelerometerTarget.entries.getOrElse(accelerometerPrefs.getInt("target", 0)) { AccelerometerTarget.TIMER }) }
+    var accelerometerTarget by remember { mutableStateOf(AccelerometerTarget.entries.getOrElse(accelerometerPrefs.getInt("target", AccelerometerTarget.ACTIVE_WINDOW.ordinal)) { AccelerometerTarget.ACTIVE_WINDOW }) }
     var accelerometerSensitivity by remember { mutableIntStateOf(accelerometerPrefs.getInt("sensitivity", 5).coerceIn(1, 10)) }
     var microphoneEnabled by remember { mutableStateOf(false) }
     var microphonePermissionGranted by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
     }
-    var microphoneTarget by remember { mutableStateOf(MicrophoneTarget.TIMER) }
+    var microphoneTarget by remember { mutableStateOf(MicrophoneTarget.entries.getOrElse(microphonePrefs.getInt("target", MicrophoneTarget.ACTIVE_WINDOW.ordinal)) { MicrophoneTarget.ACTIVE_WINDOW }) }
     var microphoneMode by remember { mutableStateOf(MicrophoneMode.RECORDED_SOUND) }
     var toneHoldEnabled by remember { mutableStateOf(false) }
     var toneHoldWasActive by remember { mutableStateOf(false) }
@@ -160,6 +161,7 @@ fun ClockApp(
                 }
                 stopwatchRunning = !stopwatchRunning
             }
+            VolumeGestureTarget.ACTIVE_WINDOW -> triggerActiveWindowClock(resetOnSensorTrigger)
         }
     })
 
@@ -171,6 +173,7 @@ fun ClockApp(
                 timerRunning = false
                 stopwatchRunning = false
             }
+            VolumeGestureTarget.ACTIVE_WINDOW -> pauseActiveWindowClock()
         }
     })
 
@@ -204,11 +207,36 @@ fun ClockApp(
         }
     }
 
+    fun triggerActiveWindowClock(reset: Boolean) {
+        when (selectedTab) {
+            AppTab.TIMER -> if (reset) { timerRunning = false; remainingSeconds = 0 } else {
+                if (timerRunning) timerRunning = false else {
+                    if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
+                    timerRunning = remainingSeconds > 0
+                }
+            }
+            AppTab.STOPWATCH -> if (reset) { stopwatchRunning = false; stopwatchMillis = 0L } else stopwatchRunning = !stopwatchRunning
+            AppTab.SETTINGS -> Unit
+        }
+    }
+    fun pauseActiveWindowClock() {
+        when (selectedTab) {
+            AppTab.TIMER -> timerRunning = false
+            AppTab.STOPWATCH -> stopwatchRunning = false
+            AppTab.SETTINGS -> Unit
+        }
+    }
+
     fun triggerClock(target: ClockTriggerTarget) {
+        if (target == ClockTriggerTarget.ACTIVE_WINDOW) {
+            triggerActiveWindowClock(resetOnSensorTrigger)
+            return
+        }
         val targets = when (target) {
             ClockTriggerTarget.TIMER -> listOf(ClockTriggerTarget.TIMER)
             ClockTriggerTarget.STOPWATCH -> listOf(ClockTriggerTarget.STOPWATCH)
             ClockTriggerTarget.BOTH -> listOf(ClockTriggerTarget.TIMER, ClockTriggerTarget.STOPWATCH)
+            ClockTriggerTarget.ACTIVE_WINDOW -> emptyList()
         }
         targets.forEach { clock ->
             if (resetOnSensorTrigger) {
@@ -216,6 +244,7 @@ fun ClockApp(
                     ClockTriggerTarget.TIMER -> { timerRunning = false; remainingSeconds = 0 }
                     ClockTriggerTarget.STOPWATCH -> { stopwatchRunning = false; stopwatchMillis = 0L }
                     ClockTriggerTarget.BOTH -> Unit
+                    ClockTriggerTarget.ACTIVE_WINDOW -> Unit
                 }
             } else {
                 when (clock) {
@@ -227,6 +256,7 @@ fun ClockApp(
                     }
                     ClockTriggerTarget.STOPWATCH -> stopwatchRunning = !stopwatchRunning
                     ClockTriggerTarget.BOTH -> Unit
+                    ClockTriggerTarget.ACTIVE_WINDOW -> Unit
                 }
             }
         }
@@ -444,7 +474,7 @@ fun ClockApp(
                             onAccelerometerTargetChanged = { target -> accelerometerTarget = target; accelerometerPrefs.edit().putInt("target", target.ordinal).apply() },
                             accelerometerSensitivity = accelerometerSensitivity,
                             onAccelerometerSensitivityChanged = { value -> accelerometerSensitivity = value; accelerometerPrefs.edit().putInt("sensitivity", value).apply() },
-                            onProximityTargetChanged = { proximityTarget = it },
+                            onProximityTargetChanged = { proximityTarget = it; proximityPrefs.edit().putInt("target", it.ordinal).apply() },
                             microphoneEnabled = microphoneEnabled,
                             onMicrophoneChanged = { enabled ->
                                 if (enabled) {
@@ -455,7 +485,7 @@ fun ClockApp(
                             },
                             microphonePermissionGranted = microphonePermissionGranted,
                             microphoneTarget = microphoneTarget,
-                            onMicrophoneTargetChanged = { microphoneTarget = it },
+                            onMicrophoneTargetChanged = { microphoneTarget = it; microphonePrefs.edit().putInt("target", it.ordinal).apply() },
                             microphoneMode = microphoneMode,
                             onMicrophoneModeChanged = { microphoneMode = it },
                             toneHoldEnabled = toneHoldEnabled,
