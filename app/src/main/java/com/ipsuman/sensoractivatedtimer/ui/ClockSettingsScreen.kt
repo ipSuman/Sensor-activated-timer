@@ -35,6 +35,8 @@ import androidx.compose.ui.unit.sp
 internal fun SettingsScreen(
     resetOnSensorTrigger: Boolean,
     onResetOnSensorTriggerChanged: (Boolean) -> Unit,
+    sensorFusionEnabled: Boolean,
+    onSensorFusionEnabledChanged: (Boolean) -> Unit,
     volumeGestureEnabled: Boolean,
     onVolumeGestureChanged: (Boolean) -> Unit,
     volumeGestureTarget: VolumeGestureTarget,
@@ -112,6 +114,28 @@ internal fun SettingsScreen(
                 }
             }
             Text("Applies to proximity, accelerometer, and microphone triggers.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+        }
+    }
+    Spacer(Modifier.height(14.dp))
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(Modifier.padding(18.dp)) {
+            Text("Sensor-Fusion", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "When enabled, a clock responds only after every enabled and available sensor reports a trigger within the same 1.2-second window. Sensors that are off do not participate. The action uses the target configured for the sensor that completes the combination.",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(if (sensorFusionEnabled) "Sensor fusion enabled" else "Sensor fusion disabled", modifier = Modifier.weight(1f))
+                Button(onClick = { onSensorFusionEnabledChanged(!sensorFusionEnabled) }) {
+                    Text(if (sensorFusionEnabled) "Turn off" else "Turn on")
+                }
+            }
         }
     }
     Spacer(Modifier.height(14.dp))
