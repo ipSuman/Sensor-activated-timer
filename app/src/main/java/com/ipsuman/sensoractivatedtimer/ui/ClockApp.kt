@@ -316,13 +316,28 @@ fun ClockApp(
     val latestToneHoldAction by rememberUpdatedState<(Boolean) -> Unit>({ active ->
         if (active) {
             toneHoldWasActive = true
-            if (remainingSeconds == 0) {
-                remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
+            when (microphoneTarget) {
+                MicrophoneTarget.TIMER -> {
+                    if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
+                    timerRunning = remainingSeconds > 0
+                }
+                MicrophoneTarget.STOPWATCH -> stopwatchRunning = true
+                MicrophoneTarget.BOTH -> {
+                    if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
+                    timerRunning = remainingSeconds > 0
+                    stopwatchRunning = true
+                }
             }
-            timerRunning = remainingSeconds > 0
         } else if (toneHoldWasActive) {
             toneHoldWasActive = false
-            timerRunning = false
+            when (microphoneTarget) {
+                MicrophoneTarget.TIMER -> timerRunning = false
+                MicrophoneTarget.STOPWATCH -> stopwatchRunning = false
+                MicrophoneTarget.BOTH -> {
+                    timerRunning = false
+                    stopwatchRunning = false
+                }
+            }
         }
     })
 
