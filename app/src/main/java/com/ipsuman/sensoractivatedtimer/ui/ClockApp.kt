@@ -93,7 +93,11 @@ private enum class VolumeGestureTarget(val label: String) {
 
 private enum class MicrophoneMode(val label: String, val description: String) {
     RECORDED_SOUND("Recorded sound", "Record a reference sound, then match its intensity and duration using the tolerances below."),
-    TONE("Tone / music", "Triggers when a sustained loud tone or music is heard; it triggers once per sound episode.")
+    TONE("Tone / music", "Hold a clock while sound intensity or a reference pitch remains matched.")
+}
+
+private enum class ToneHoldMode(val label: String) {
+    INTENSITY("Intensity hold"), PITCH("Pitch hold")
 }
 
 @Composable
@@ -135,6 +139,7 @@ fun ClockApp(
     var microphoneTarget by remember { mutableStateOf(MicrophoneTarget.TIMER) }
     var microphoneMode by remember { mutableStateOf(MicrophoneMode.RECORDED_SOUND) }
     var toneHoldEnabled by remember { mutableStateOf(false) }
+    var toneHoldMode by remember { mutableStateOf(ToneHoldMode.INTENSITY) }
     var toneHoldWasActive by remember { mutableStateOf(false) }
     var toneMinimumIntensity by remember { mutableIntStateOf(1800) }
     var microphoneError by remember { mutableStateOf<String?>(null) }
@@ -143,6 +148,7 @@ fun ClockApp(
     val microphonePrefs = remember(context) { context.getSharedPreferences("microphone_settings", android.content.Context.MODE_PRIVATE) }
     LaunchedEffect(microphonePrefs) {
         toneHoldEnabled = microphonePrefs.getBoolean("tone_hold_timer", false)
+        toneHoldMode = ToneHoldMode.entries.getOrElse(microphonePrefs.getInt("tone_hold_mode", 0)) { ToneHoldMode.INTENSITY }
         toneMinimumIntensity = microphonePrefs.getInt("tone_minimum_intensity", 1800).coerceIn(500, 12000)
     }
     var referenceIntensity by remember { mutableStateOf(microphonePrefs.getFloat("reference_intensity", 0f).toDouble()) }
@@ -351,6 +357,7 @@ fun ClockApp(
                 onError = { error -> microphoneError = error; microphoneEnabled = false },
                 triggerMode = if (microphoneMode == MicrophoneMode.RECORDED_SOUND) MicrophoneTriggerMode.RECORDED_SOUND else MicrophoneTriggerMode.TONE,
                 holdWhileToneActive = toneHoldEnabled && microphoneMode == MicrophoneMode.TONE,
+                holdPitchMode = toneHoldMode == ToneHoldMode.PITCH,
                 onToneActivityChanged = { active -> latestToneHoldAction(active) },
                 initialToneMinimumIntensity = toneMinimumIntensity,
                 initialReferenceIntensity = referenceIntensity,
@@ -550,6 +557,11 @@ fun ClockApp(
                                 toneHoldEnabled = enabled
                                 microphonePrefs.edit().putBoolean("tone_hold_timer", enabled).apply()
                             },
+                            toneHoldMode = toneHoldMode,
+                            onToneHoldModeChanged = { mode ->
+                                toneHoldMode = mode
+                                microphonePrefs.edit().putInt("tone_hold_mode", mode.ordinal).apply()
+                            },
                             microphoneLevel = microphoneLevel,
                             toneMinimumIntensity = toneMinimumIntensity,
                             onToneMinimumIntensityChanged = { value ->
@@ -560,6 +572,7 @@ fun ClockApp(
                             microphoneError = microphoneError,
                             microphoneMessage = microphoneMessage,
                             referenceIntensitySaved = referenceIntensity > 100.0 && referenceDurationMs > 0L,
+                            referencePitchHz = referencePitchHz,
                             intensityTolerance = intensityTolerance,
                             onIntensityToleranceChanged = { value ->
                                 intensityTolerance = value
@@ -808,12 +821,15 @@ private fun SettingsScreen(
     onMicrophoneModeChanged: (MicrophoneMode) -> Unit,
     toneHoldEnabled: Boolean,
     onToneHoldChanged: (Boolean) -> Unit,
+    toneHoldMode: ToneHoldMode,
+    onToneHoldModeChanged: (ToneHoldMode) -> Unit,
     microphoneLevel: Float,
     toneMinimumIntensity: Int,
     onToneMinimumIntensityChanged: (Int) -> Unit,
     microphoneError: String?,
     microphoneMessage: String?,
     referenceIntensitySaved: Boolean,
+    referencePitchHz: Int,
     intensityTolerance: Int,
     onIntensityToleranceChanged: (Int) -> Unit,
     durationTolerance: Int,
@@ -1052,7 +1068,7 @@ private fun SettingsScreen(
                     onValueChange = { onToneMinimumIntensityChanged(it.toInt().coerceIn(500, 12000)) },
                     valueRange = 500f..12000f,
                     steps = 22,
-                    enabled = microphoneEnabled
+                    enabled = microphoneEnabled && (!toneHoldEnabled || toneHoldMode == ToneHoldMode.INTENSITY)
                 )
                 Text(
                     "Live intensity: ${microphoneLevel.toInt()} RMS. Raise the threshold to ignore quieter background noise; lower it to detect softer tones.",
@@ -1067,13 +1083,58 @@ private fun SettingsScreen(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Column(Modifier.padding(14.dp)) {
-                    Text("Run timer while tone plays", fontWeight = FontWeight.SemiBold)
+                    Text("Run clock while tone plays", fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "Starts the timer after a sustained tone is detected and pauses it as soon as the tone signal stops. This works with Tone / music mode.",
+                        "Hold the selected clock(s) while sound matches the selected mode. Intensity hold follows loudness; pitch hold follows a recorded reference pitch.",
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                         fontSize = 13.sp
                     )
+                    Spacer(Modifier.height(8.dp))
+                    Text("Hold mode", fontWeight = FontWeight.SemiBold)
+                    var toneHoldModeMenuExpanded by remember { mutableStateOf(false) }
+                    Button(onClick = { toneHoldModeMenuExpanded = true }, enabled = microphoneEnabled && microphoneMode == MicrophoneMode.TONE) {
+                        Text(toneHoldMode.label)
+                    }
+                    DropdownMenu(expanded = toneHoldModeMenuExpanded, onDismissRequest = { toneHoldModeMenuExpanded = false }) {
+                        ToneHoldMode.entries.forEach { mode ->
+                            DropdownMenuItem(text = { Text(mode.label) }, onClick = {
+                                onToneHoldModeChanged(mode)
+                                toneHoldModeMenuExpanded = false
+                            })
+                        }
+                    }
+                    if (toneHoldMode == ToneHoldMode.PITCH) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            if (referencePitchHz > 0) "Reference pitch: $referencePitchHz Hz" else "No reference pitch saved. Record a clear, steady musical note below first.",
+                            color = if (referencePitchHz > 0) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f) else MaterialTheme.colorScheme.error,
+                            fontSize = 12.sp
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Button(onClick = onRecordReferenceSound, enabled = microphoneEnabled) { Text("Record reference pitch") }
+                        Spacer(Modifier.height(6.dp))
+                        Text("Pitch tolerance: ±$pitchTolerance%", fontWeight = FontWeight.SemiBold)
+                        Slider(
+                            value = pitchTolerance.toFloat(),
+                            onValueChange = { onPitchToleranceChanged(it.toInt().coerceIn(0, 100)) },
+                            valueRange = 0f..100f,
+                            steps = 9,
+                            enabled = microphoneEnabled && referencePitchHz > 0
+                        )
+                        Text("Pitch detection is approximate and works best with a clear, steady note; complex music may not have a stable single pitch.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                    } else {
+                        Spacer(Modifier.height(6.dp))
+                        Text("Intensity tolerance: ±$intensityTolerance%", fontWeight = FontWeight.SemiBold)
+                        Slider(
+                            value = intensityTolerance.toFloat(),
+                            onValueChange = { onIntensityToleranceChanged(it.toInt().coerceIn(0, 100)) },
+                            valueRange = 0f..100f,
+                            steps = 9,
+                            enabled = microphoneEnabled && microphoneMode == MicrophoneMode.TONE
+                        )
+                        Text("Intensity hold uses the minimum intensity threshold above; this tolerance is available for sound matching.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                    }
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(if (toneHoldEnabled) "Enabled" else "Disabled", modifier = Modifier.weight(1f))
