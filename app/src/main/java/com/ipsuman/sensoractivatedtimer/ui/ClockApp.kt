@@ -121,7 +121,7 @@ fun ClockApp(
     var microphonePermissionGranted by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
     }
-    var microphoneTarget by remember { mutableStateOf(MicrophoneTarget.entries.getOrElse(microphonePrefs.getInt("target", MicrophoneTarget.ACTIVE_WINDOW.ordinal)) { MicrophoneTarget.ACTIVE_WINDOW }) }
+    var microphoneTarget by remember { mutableStateOf(MicrophoneTarget.ACTIVE_WINDOW) }
     var microphoneMode by remember { mutableStateOf(MicrophoneMode.RECORDED_SOUND) }
     var toneHoldEnabled by remember { mutableStateOf(false) }
     var toneHoldWasActive by remember { mutableStateOf(false) }
@@ -130,6 +130,11 @@ fun ClockApp(
     var microphoneMessage by remember { mutableStateOf<String?>(null) }
     var microphoneController by remember { mutableStateOf<MicrophoneTapController?>(null) }
     val microphonePrefs = remember(context) { context.getSharedPreferences("microphone_settings", android.content.Context.MODE_PRIVATE) }
+    LaunchedEffect(microphonePrefs) {
+        microphoneTarget = MicrophoneTarget.entries.getOrElse(
+            microphonePrefs.getInt("target", MicrophoneTarget.ACTIVE_WINDOW.ordinal)
+        ) { MicrophoneTarget.ACTIVE_WINDOW }
+    }
     LaunchedEffect(microphonePrefs) {
         toneHoldEnabled = microphonePrefs.getBoolean("tone_hold_timer", false)
         toneMinimumIntensity = microphonePrefs.getInt("tone_minimum_intensity", 1800).coerceIn(500, 12000)
@@ -224,26 +229,6 @@ fun ClockApp(
         } else {
             microphoneEnabled = false
             microphoneError = "Microphone permission was denied. Allow it in Android app permissions to use this trigger."
-        }
-    }
-
-    fun triggerActiveWindowClock(reset: Boolean) {
-        when (selectedTab) {
-            AppTab.TIMER -> if (reset) { timerRunning = false; remainingSeconds = 0 } else {
-                if (timerRunning) timerRunning = false else {
-                    if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
-                    timerRunning = remainingSeconds > 0
-                }
-            }
-            AppTab.STOPWATCH -> if (reset) { stopwatchRunning = false; stopwatchMillis = 0L } else stopwatchRunning = !stopwatchRunning
-            AppTab.SETTINGS -> Unit
-        }
-    }
-    fun pauseActiveWindowClock() {
-        when (selectedTab) {
-            AppTab.TIMER -> timerRunning = false
-            AppTab.STOPWATCH -> stopwatchRunning = false
-            AppTab.SETTINGS -> Unit
         }
     }
 
