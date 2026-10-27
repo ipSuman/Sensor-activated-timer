@@ -81,6 +81,11 @@ fun ClockApp(
     var selectedTab by remember { mutableStateOf(AppTab.TIMER) }
     val sensorActionPrefs = remember(context) { context.getSharedPreferences("sensor_action_settings", android.content.Context.MODE_PRIVATE) }
     var resetOnSensorTrigger by remember { mutableStateOf(sensorActionPrefs.getBoolean("reset_on_trigger", false)) }
+    var cameraEnabled by remember { mutableStateOf(sensorActionPrefs.getBoolean("camera_enabled", false)) }
+    var cameraFront by remember { mutableStateOf(sensorActionPrefs.getBoolean("camera_front", false)) }
+    var cameraTarget by remember { mutableStateOf(CameraTarget.entries.getOrElse(sensorActionPrefs.getInt("camera_target", CameraTarget.ACTIVE_WINDOW.ordinal)) { CameraTarget.ACTIVE_WINDOW }) }
+    var cameraPermissionGranted by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
+    val cameraAvailable = remember(context) { context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY) }
     var sensorListeningIntervalMs by remember { mutableIntStateOf(sensorActionPrefs.getInt("listening_interval_ms", 100).coerceIn(10, 1000)) }
     var lastSensorInputAt by remember { mutableLongStateOf(0L) }
     var historyEntries by remember(context) { mutableStateOf(loadClockHistory(context)) }
@@ -243,6 +248,12 @@ fun ClockApp(
         notificationPrefs.edit().putBoolean("timer_notifications_enabled", granted).apply()
     }
 
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        cameraPermissionGranted = granted
+        cameraEnabled = granted
+        sensorActionPrefs.edit().putBoolean("camera_enabled", granted).apply()
+    }
+
     val microphonePermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -300,6 +311,7 @@ fun ClockApp(
             }
         }
     }
+    val latestCameraAction by rememberUpdatedState<() -> Unit>({ triggerClock(cameraTarget.toClockTriggerTarget()) })
     val latestProximityAction by rememberUpdatedState<() -> Unit>({ triggerClock(proximityTarget.toClockTriggerTarget()) })
     val latestAccelerometerAction by rememberUpdatedState<() -> Unit>({ triggerClock(accelerometerTarget.toClockTriggerTarget()) })
     val latestMicrophoneAction by rememberUpdatedState<() -> Unit>({ triggerClock(microphoneTarget.toClockTriggerTarget()) })
@@ -459,6 +471,13 @@ fun ClockApp(
                         AppTab.TIMER -> Column {
                             SensorStatusPanel(microphoneEnabled && microphonePermissionGranted, microphoneHistory, microphoneSpectrum, microphoneSpectrumMode, { microphoneSpectrumMode = !microphoneSpectrumMode }, microphoneLevel, microphonePitchHz, proximityEnabled && proximityAvailable, proximityDistanceCm, accelerometerEnabled && accelerometerAvailable)
                             TimerScreen(
+                            cameraEnabled = cameraEnabled && cameraPermissionGranted,
+                            cameraFront = cameraFront,
+                            onToggleCamera = {
+                                cameraFront = !cameraFront
+                                sensorActionPrefs.edit().putBoolean("camera_front", cameraFront).apply()
+                            },
+                            onCameraMovement = { latestCameraAction() },
                             durationInput = durationInput,
                             onDurationChange = { durationInput = it.filter(Char::isDigit).take(5) },
                             remainingSeconds = remainingSeconds,
@@ -484,6 +503,13 @@ fun ClockApp(
                         AppTab.STOPWATCH -> Column {
                             SensorStatusPanel(microphoneEnabled && microphonePermissionGranted, microphoneHistory, microphoneSpectrum, microphoneSpectrumMode, { microphoneSpectrumMode = !microphoneSpectrumMode }, microphoneLevel, microphonePitchHz, proximityEnabled && proximityAvailable, proximityDistanceCm, accelerometerEnabled && accelerometerAvailable)
                             StopwatchScreen(
+                            cameraEnabled = cameraEnabled && cameraPermissionGranted,
+                            cameraFront = cameraFront,
+                            onToggleCamera = {
+                                cameraFront = !cameraFront
+                                sensorActionPrefs.edit().putBoolean("camera_front", cameraFront).apply()
+                            },
+                            onCameraMovement = { latestCameraAction() },
                             elapsedMillis = stopwatchMillis,
                             running = stopwatchRunning,
                             sensorListeningIntervalMs = sensorListeningIntervalMs,
@@ -528,6 +554,26 @@ fun ClockApp(
                             accelerometerSensitivity = accelerometerSensitivity,
                             onAccelerometerSensitivityChanged = { value -> accelerometerSensitivity = value; accelerometerPrefs.edit().putInt("sensitivity", value).apply() },
                             onProximityTargetChanged = { proximityTarget = it; proximityPrefs.edit().putInt("target", it.ordinal).apply() },
+                            cameraEnabled = cameraEnabled,
+                            onCameraChanged = { enabled ->
+                                if (!enabled) {
+                                    cameraEnabled = false
+                                    sensorActionPrefs.edit().putBoolean("camera_enabled", false).apply()
+                                } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                                    cameraPermissionGranted = true
+                                    cameraEnabled = true
+                                    sensorActionPrefs.edit().putBoolean("camera_enabled", true).apply()
+                                } else {
+                                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                }
+                            },
+                            cameraPermissionGranted = cameraPermissionGranted,
+                            cameraAvailable = cameraAvailable,
+                            cameraTarget = cameraTarget,
+                            onCameraTargetChanged = { target ->
+                                cameraTarget = target
+                                sensorActionPrefs.edit().putInt("camera_target", target.ordinal).apply()
+                            },
                             microphoneEnabled = microphoneEnabled,
                             onMicrophoneChanged = { enabled ->
                                 if (enabled) {
