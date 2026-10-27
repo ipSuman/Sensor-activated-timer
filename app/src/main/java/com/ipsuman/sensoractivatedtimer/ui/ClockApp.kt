@@ -1125,15 +1125,22 @@ private fun SettingsScreen(
                         Text("Pitch detection is approximate and works best with a clear, steady note; complex music may not have a stable single pitch.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                     } else {
                         Spacer(Modifier.height(6.dp))
+                        Text(
+                            if (referenceIntensitySaved) "Reference intensity: ${referenceIntensitySaved.let { "saved" }}" else "Record a reference sound to enable intensity tolerance matching.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                        Button(onClick = onRecordReferenceSound, enabled = microphoneEnabled) { Text("Record reference intensity") }
+                        Spacer(Modifier.height(6.dp))
                         Text("Intensity tolerance: ±$intensityTolerance%", fontWeight = FontWeight.SemiBold)
                         Slider(
                             value = intensityTolerance.toFloat(),
                             onValueChange = { onIntensityToleranceChanged(it.toInt().coerceIn(0, 100)) },
                             valueRange = 0f..100f,
                             steps = 9,
-                            enabled = microphoneEnabled && microphoneMode == MicrophoneMode.TONE
+                            enabled = microphoneEnabled && microphoneMode == MicrophoneMode.TONE && referenceIntensitySaved
                         )
-                        Text("Intensity hold uses the minimum intensity threshold above; this tolerance is available for sound matching.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                        Text("With a saved reference, the live intensity must stay within this tolerance band. Without one, the minimum intensity threshold above is used.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                     }
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
