@@ -167,6 +167,8 @@ internal fun TimerScreen(
 internal fun StopwatchScreen(
     elapsedMillis: Long,
     running: Boolean,
+    sensorListeningIntervalMs: Int,
+    onSensorListeningIntervalChanged: (Int) -> Unit,
     onToggle: () -> Unit,
     onReset: () -> Unit
 ) {
@@ -187,6 +189,28 @@ internal fun StopwatchScreen(
                 Button(onClick = onToggle) { Text(if (running) "Pause" else "Start") }
                 Button(onClick = onReset) { Text("Reset") }
             }
+            Spacer(Modifier.height(28.dp))
+            Text("Sensor listening interval", fontWeight = FontWeight.Bold)
+            Text(
+                "Every " + "%.2f".format(sensorListeningIntervalMs / 1000f) + " sec",
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold
+            )
+            androidx.compose.material3.Slider(
+                value = sensorListeningIntervalMs.toFloat(),
+                onValueChange = { onSensorListeningIntervalChanged(it.toInt().coerceIn(10, 1000)) },
+                valueRange = 10f..1000f,
+                steps = 98
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("0.01 sec", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("1 sec", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(
+                "Applies to proximity, accelerometer and microphone triggers.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
