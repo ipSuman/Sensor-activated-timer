@@ -20,3 +20,29 @@ internal class ClockAppState {
     val stopwatchRunning = mutableStateOf(false)
     val stopwatchMillis = mutableLongStateOf(0L)
 }
+
+internal enum class AppTab(val title: String) {
+    TIMER("Timer"), STOPWATCH("Stopwatch"), SETTINGS("Settings")
+}
+
+internal enum class ProximityTarget(val label: String) {
+    TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")
+}
+
+internal enum class AccelerometerTarget(val label: String) {
+    TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")
+}
+
+internal enum class MicrophoneTarget(val label: String) {
+    TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")
+}
+
+internal enum class VolumeGestureTarget(val label: String) {
+    TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")
+}
+
+internal enum class MicrophoneMode(val label: String, val description: String) {
+    RECORDED_SOUND("Recorded sound", "Record a reference sound, then match its intensity and duration using the tolerances below."),
+    TONE("Tone / music", "Hold a clock while sound intensity stays above the threshold or within a saved reference tolerance.")
+}
+
