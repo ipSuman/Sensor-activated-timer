@@ -67,7 +67,7 @@ internal fun ClockTimerEffects(
                         "Timer: $timerText remaining • Stopwatch: $stopwatchText elapsed"
                     )
                     latestTimerRunning -> TimerNotificationHelper.showClockStatus(context, "Timer", timerText)
-                    stopwatchRunning -> TimerNotificationHelper.showClockStatus(context, "Stopwatch", stopwatchText)
+                    latestStopwatchRunning -> TimerNotificationHelper.showClockStatus(context, "Stopwatch", stopwatchText)
                 }
                 delay(1000)
             }
