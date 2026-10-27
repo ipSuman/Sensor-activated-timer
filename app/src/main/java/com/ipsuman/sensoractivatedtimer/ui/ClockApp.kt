@@ -352,12 +352,8 @@ fun ClockApp(
         }
     }
 
-    LaunchedEffect(stopwatchRunning) {
-        while (stopwatchRunning) {
-            delay(50)
-            stopwatchMillis += 50
-        }
-    }
+    ClockStopwatchEffect(running = stopwatchRunning) { elapsed -> stopwatchMillis += elapsed }
+
 
     LaunchedEffect(timerRunning, stopwatchRunning, notificationsEnabled, notificationPermissionGranted) {
         if (!notificationsEnabled || !notificationPermissionGranted || (!timerRunning && !stopwatchRunning)) {
