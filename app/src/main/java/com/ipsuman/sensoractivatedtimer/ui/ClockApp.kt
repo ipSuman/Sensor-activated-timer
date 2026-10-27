@@ -347,7 +347,7 @@ fun ClockApp(
         }
     })
 
-    DisposableEffect(context, microphoneEnabled, microphonePermissionGranted, microphoneMode, toneHoldEnabled) {
+    DisposableEffect(context, microphoneEnabled, microphonePermissionGranted, microphoneMode, toneHoldEnabled, toneHoldMode) {
         if (!microphoneEnabled || !microphonePermissionGranted) {
             onDispose { }
         } else {
