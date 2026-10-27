@@ -60,8 +60,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ipsuman.sensoractivatedtimer.TimerNotificationHelper
-import com.ipsuman.sensoractivatedtimer.sensor.MicrophoneTapController
-import com.ipsuman.sensoractivatedtimer.sensor.MicrophoneTriggerMode
 import kotlinx.coroutines.delay
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -295,51 +293,42 @@ fun ClockApp(
         }
     })
 
-    DisposableEffect(context, microphoneEnabled, microphonePermissionGranted, microphoneMode, toneHoldEnabled) {
-        if (!microphoneEnabled || !microphonePermissionGranted) {
-            onDispose { }
-        } else {
-            val controller = MicrophoneTapController(
-                context = context,
-                onTripleTap = { latestMicrophoneAction() },
-                onError = { error -> microphoneError = error; microphoneEnabled = false },
-                triggerMode = if (microphoneMode == MicrophoneMode.RECORDED_SOUND) MicrophoneTriggerMode.RECORDED_SOUND else MicrophoneTriggerMode.TONE,
-                holdWhileToneActive = toneHoldEnabled && microphoneMode == MicrophoneMode.TONE,
-                onToneActivityChanged = { active -> latestToneHoldAction(active) },
-                initialToneMinimumIntensity = toneMinimumIntensity,
-                initialReferenceIntensity = referenceIntensity,
-                initialReferenceDurationMs = referenceDurationMs,
-                initialReferencePitchHz = referencePitchHz,
-                intensityTolerancePercent = intensityTolerance,
-                durationTolerancePercent = durationTolerance,
-                pitchTolerancePercent = pitchTolerance,
-                onAudioMetrics = { intensity, pitchHz ->
-                    microphoneLevel = intensity.toFloat()
-                    microphonePitchHz = pitchHz
-                    microphoneHistory = (microphoneHistory + intensity.toFloat()).takeLast(48)
-                },
-                onSpectrumMetrics = { bins -> microphoneSpectrum = bins },
-                onReferenceSoundChanged = { intensity, durationMs, pitchHz ->
-                    referenceIntensity = intensity
-                    referenceDurationMs = durationMs
-                    referencePitchHz = pitchHz
-                    microphonePrefs.edit()
-                        .putFloat("reference_intensity", intensity.toFloat())
-                        .putLong("reference_duration_ms", durationMs)
-                        .putInt("reference_pitch_hz", pitchHz)
-                        .apply()
-                    microphoneMessage = "Reference saved: ${durationMs} ms sound duration."
-                    microphoneError = null
-                }
-            )
-            microphoneController = controller
-            controller.start()
-            onDispose {
-                controller.stop()
-                if (microphoneController === controller) microphoneController = null
-            }
-        }
-    }
+    ClockMicrophoneEffects(
+        context = context,
+        enabled = microphoneEnabled,
+        permissionGranted = microphonePermissionGranted,
+        mode = microphoneMode,
+        toneHoldEnabled = toneHoldEnabled,
+        toneMinimumIntensity = toneMinimumIntensity,
+        referenceIntensity = referenceIntensity,
+        referenceDurationMs = referenceDurationMs,
+        referencePitchHz = referencePitchHz,
+        intensityTolerance = intensityTolerance,
+        durationTolerance = durationTolerance,
+        pitchTolerance = pitchTolerance,
+        onTripleTap = { latestMicrophoneAction() },
+        onError = { error -> microphoneError = error; microphoneEnabled = false },
+        onToneActivityChanged = { active -> latestToneHoldAction(active) },
+        onAudioMetrics = { intensity, pitchHz ->
+            microphoneLevel = intensity.toFloat()
+            microphonePitchHz = pitchHz
+            microphoneHistory = (microphoneHistory + intensity.toFloat()).takeLast(48)
+        },
+        onSpectrumMetrics = { bins -> microphoneSpectrum = bins },
+        onReferenceSoundChanged = { intensity, durationMs, pitchHz ->
+            referenceIntensity = intensity
+            referenceDurationMs = durationMs
+            referencePitchHz = pitchHz
+            microphonePrefs.edit()
+                .putFloat("reference_intensity", intensity.toFloat())
+                .putLong("reference_duration_ms", durationMs)
+                .putInt("reference_pitch_hz", pitchHz)
+                .apply()
+            microphoneMessage = "Reference saved: ${durationMs} ms sound duration."
+            microphoneError = null
+        },
+        onControllerChanged = { microphoneController = it }
+    )
 
     LaunchedEffect(Unit) {
         while (true) {
