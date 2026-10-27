@@ -290,6 +290,35 @@ internal fun SettingsScreen(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(Modifier.padding(18.dp)) {
+            Text("Camera movement", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(6.dp))
+            Text(if (!cameraAvailable) "No camera is available on this device." else if (!cameraPermissionGranted) "Camera permission is required." else "Detects changes between camera frames and triggers the selected clock.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(if (cameraEnabled) "Enabled" else "Disabled", modifier = Modifier.weight(1f))
+                Button(onClick = { onCameraChanged(!cameraEnabled) }, enabled = cameraAvailable) { Text(if (cameraEnabled) "Turn off" else "Turn on") }
+            }
+            Spacer(Modifier.height(14.dp))
+            Text("Activate camera for", fontWeight = FontWeight.SemiBold)
+            var cameraMenuExpanded by remember { mutableStateOf(false) }
+            Spacer(Modifier.height(6.dp))
+            Button(onClick = { cameraMenuExpanded = true }, enabled = cameraEnabled && cameraAvailable && cameraPermissionGranted) { Text(cameraTarget.label) }
+            DropdownMenu(expanded = cameraMenuExpanded, onDismissRequest = { cameraMenuExpanded = false }) {
+                CameraTarget.entries.forEach { target ->
+                    DropdownMenuItem(text = { Text(target.label) }, onClick = { onCameraTargetChanged(target); cameraMenuExpanded = false })
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text("When enabled, a small live preview appears below the Timer or Stopwatch reading. Movement in view triggers the selected clock using the global pause/resume or reset setting.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+        }
+    }
+    Spacer(Modifier.height(14.dp))
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(Modifier.padding(18.dp)) {
             Text("Microphone", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(6.dp))
             Text(
