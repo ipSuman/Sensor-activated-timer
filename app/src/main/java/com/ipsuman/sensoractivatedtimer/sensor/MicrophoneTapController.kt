@@ -121,6 +121,7 @@ class MicrophoneTapController(
                 var calibrationDurationMs = 0L
                 var calibrationPitchSum = 0L
                 var calibrationPitchSamples = 0
+                var lastUiMetricsAt = 0L
                 try {
                     while (running) {
                         val count = audioRecord.read(buffer, 0, buffer.size)
@@ -131,16 +132,22 @@ class MicrophoneTapController(
                             sumSquares += value * value
                         }
                         val rms = sqrt(sumSquares / count)
+                        // Pitch is needed by the trigger logic, but UI graphs do not need a
+                        // recomposition for every audio buffer. Throttle graph/UI work to 10 Hz.
+                        val now = System.currentTimeMillis()
+                        val publishUiMetrics = now - lastUiMetricsAt >= 100L
                         val pitchHz = estimatePitchHz(buffer, count, sampleRate)
-                        val spectrum = calculateSpectrum(buffer, count, sampleRate)
-                        mainHandler.post {
-                            if (running) {
-                                onAudioMetrics(rms, pitchHz)
-                                onSpectrumMetrics(spectrum)
+                        if (publishUiMetrics) {
+                            lastUiMetricsAt = now
+                            val spectrum = calculateSpectrum(buffer, count, sampleRate)
+                            mainHandler.post {
+                                if (running) {
+                                    onAudioMetrics(rms, pitchHz)
+                                    onSpectrumMetrics(spectrum)
+                                }
                             }
                         }
                         val threshold = maxOf(toneMinimumIntensity, noiseFloor * 2.8)
-                        val now = System.currentTimeMillis()
 
                         if (calibrationRequested) {
                             if (calibrationStartedAt == 0L) {
@@ -318,19 +325,36 @@ class MicrophoneTapController(
     }
 
     private fun estimatePitchHz(samples: ShortArray, count: Int, sampleRate: Int): Int {
-        if (count < 512) return 0
-        // Autocorrelation pitch estimate; silence/noise naturally produces no stable pitch.
+        if (count < 2048) return 0
+
+        // Downsample 4:1 with a short averaging filter before autocorrelation. The pitch
+        // range used here is 70–1000 Hz, so this retains the fundamental while reducing
+        // the quadratic work by roughly an order of magnitude.
+        val factor = 4
+        val reducedCount = minOf(count / factor, 512)
+        if (reducedCount < 128) return 0
+        val reduced = DoubleArray(reducedCount)
+        for (i in 0 until reducedCount) {
+            val base = i * factor
+            reduced[i] = (
+                samples[base].toDouble() +
+                samples[base + 1].toDouble() +
+                samples[base + 2].toDouble() +
+                samples[base + 3].toDouble()
+            ) / factor
+        }
+        val reducedRate = sampleRate / factor
         var bestLag = 0
         var bestCorrelation = 0.0
-        val minLag = sampleRate / 1000 // about 1 kHz upper pitch
-        val maxLag = minOf(sampleRate / 70, count / 2)
+        val minLag = maxOf(1, reducedRate / 1000)
+        val maxLag = minOf(reducedRate / 70, reducedCount / 2)
         for (lag in minLag..maxLag) {
             var correlation = 0.0
             var energyA = 0.0
             var energyB = 0.0
-            for (i in 0 until count - lag) {
-                val a = samples[i].toDouble()
-                val b = samples[i + lag].toDouble()
+            for (i in 0 until reducedCount - lag) {
+                val a = reduced[i]
+                val b = reduced[i + lag]
                 correlation += a * b
                 energyA += a * a
                 energyB += b * b
@@ -342,7 +366,7 @@ class MicrophoneTapController(
                 bestLag = lag
             }
         }
-        return if (bestCorrelation >= 0.25 && bestLag > 0) sampleRate / bestLag else 0
+        return if (bestCorrelation >= 0.25 && bestLag > 0) reducedRate / bestLag else 0
     }
 
     fun stop() {
