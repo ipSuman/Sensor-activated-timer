@@ -208,6 +208,9 @@ class MicrophoneTapController(
                                     pitchHz.toDouble() in (pitchReference * (1.0 - pitchTolerance))..(pitchReference * (1.0 + pitchTolerance))
                                 val signalMatches = if (holdWhileToneActive && holdPitchMode) {
                                     rms >= maxOf(500.0, noiseFloor * 1.5) && pitchMatches
+                                } else if (holdWhileToneActive && referenceIntensity > 100.0) {
+                                    val tolerance = intensityTolerancePercent.coerceIn(0, 100) / 100.0
+                                    rms in (referenceIntensity * (1.0 - tolerance))..(referenceIntensity * (1.0 + tolerance))
                                 } else {
                                     rms >= threshold
                                 }
