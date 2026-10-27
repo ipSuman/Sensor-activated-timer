@@ -91,6 +91,10 @@ fun ClockApp(
         historyEntries = historyEntries.filterNot { it.dateLabel() == date }
         saveClockHistory(context, historyEntries)
     }
+    fun deleteHistoryEntry(entry: ClockHistoryEntry) {
+        historyEntries = historyEntries.filterNot { it.timestamp == entry.timestamp && it.kind == entry.kind && it.reading == entry.reading }
+        saveClockHistory(context, historyEntries)
+    }
     val clockState = remember { ClockAppState() }
     var currentTime by clockState.currentTime
     var durationInput by clockState.durationInput
@@ -397,7 +401,7 @@ fun ClockApp(
                                 remainingSeconds = 0
                             }
                             )
-                            ClockHistoryPanel(historyEntries.filter { it.kind == "Timer" }, onDeleteDate = ::deleteHistoryDate)
+                            ClockHistoryPanel(historyEntries.filter { it.kind == "Timer" }, onDeleteDate = ::deleteHistoryDate, onDeleteEntry = ::deleteHistoryEntry)
                         }
                         AppTab.STOPWATCH -> Column {
                             SensorStatusPanel(microphoneEnabled && microphonePermissionGranted, microphoneHistory, microphoneSpectrum, microphoneSpectrumMode, { microphoneSpectrumMode = !microphoneSpectrumMode }, microphoneLevel, microphonePitchHz, proximityEnabled && proximityAvailable, proximityDistanceCm, accelerometerEnabled && accelerometerAvailable)
@@ -411,7 +415,7 @@ fun ClockApp(
                                 stopwatchMillis = 0L
                             }
                             )
-                            ClockHistoryPanel(historyEntries.filter { it.kind == "Stopwatch" }, onDeleteDate = ::deleteHistoryDate)
+                            ClockHistoryPanel(historyEntries.filter { it.kind == "Stopwatch" }, onDeleteDate = ::deleteHistoryDate, onDeleteEntry = ::deleteHistoryEntry)
                         }
                         AppTab.SETTINGS -> SettingsScreen(
                             resetOnSensorTrigger = resetOnSensorTrigger,
