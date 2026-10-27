@@ -154,9 +154,9 @@ fun ClockApp(
         when (selectedTab) {
             AppTab.TIMER -> {
                 if (reset && timerRunning) {
-                    // A trigger resets an active timer; if stopped, it starts it.
+                    // Reset a running countdown to its configured duration, not merely pause it.
                     timerRunning = false
-                    remainingSeconds = 0
+                    remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
                 } else if (timerRunning) {
                     timerRunning = false
                 } else {
@@ -260,8 +260,9 @@ fun ClockApp(
             when (clock) {
                 ClockTriggerTarget.TIMER -> {
                     if (resetOnSensorTrigger && timerRunning) {
+                        // Reset a running countdown to its configured duration, not merely pause it.
                         timerRunning = false
-                        remainingSeconds = 0
+                        remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
                     } else if (timerRunning) {
                         timerRunning = false
                     } else {
