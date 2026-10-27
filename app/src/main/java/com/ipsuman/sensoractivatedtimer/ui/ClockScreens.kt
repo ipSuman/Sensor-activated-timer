@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-private fun SensorStatusPanel(
+internal fun SensorStatusPanel(
     microphoneActive: Boolean,
     microphoneHistory: List<Float>,
     microphoneSpectrum: List<Float>,
@@ -122,7 +122,7 @@ private fun SensorStatusPanel(
     }
 }
 @Composable
-private fun TimerScreen(
+internal fun TimerScreen(
     durationInput: String,
     onDurationChange: (String) -> Unit,
     remainingSeconds: Int,
@@ -164,7 +164,7 @@ private fun TimerScreen(
 }
 
 @Composable
-private fun StopwatchScreen(
+internal fun StopwatchScreen(
     elapsedMillis: Long,
     running: Boolean,
     onToggle: () -> Unit,
