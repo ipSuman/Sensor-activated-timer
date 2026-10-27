@@ -61,9 +61,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ipsuman.sensoractivatedtimer.TimerNotificationHelper
 import com.ipsuman.sensoractivatedtimer.sensor.MicrophoneTapController
-import kotlinx.coroutines.delay
-import java.time.LocalTime
-import java.time.format.DateTimeFormatter
 
 private val DarkColors = darkColorScheme()
 private val LightColors = lightColorScheme()
@@ -331,12 +328,7 @@ fun ClockApp(
         onControllerChanged = { microphoneController = it }
     )
 
-    LaunchedEffect(Unit) {
-        while (true) {
-            currentTime = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"))
-            delay(1000)
-        }
-    }
+    ClockTimeEffect(onTimeChanged = { currentTime = it })
 
     LaunchedEffect(timerRunning, notificationsEnabled, notificationPermissionGranted) {
         if (timerRunning && notificationsEnabled && notificationPermissionGranted && remainingSeconds > 0) {
