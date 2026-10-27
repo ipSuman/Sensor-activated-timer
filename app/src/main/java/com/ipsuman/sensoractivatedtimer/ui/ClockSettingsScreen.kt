@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 internal fun SettingsScreen(
+    resetOnSensorTrigger: Boolean,
+    onResetOnSensorTriggerChanged: (Boolean) -> Unit,
     volumeGestureEnabled: Boolean,
     onVolumeGestureChanged: (Boolean) -> Unit,
     volumeGestureTarget: VolumeGestureTarget,
@@ -82,6 +84,30 @@ internal fun SettingsScreen(
 ) {
     val context = LocalContext.current
     Text("SENSOR SETTINGS", color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
+    Spacer(Modifier.height(14.dp))
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(Modifier.padding(18.dp)) {
+            Text("Sensor trigger action", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                if (resetOnSensorTrigger) "Sensor or microphone triggers reset the selected clock(s) to zero."
+                else "Sensor or microphone triggers pause a running clock or resume it when paused.",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(if (resetOnSensorTrigger) "Reset on trigger" else "Pause / resume on trigger", modifier = Modifier.weight(1f))
+                Button(onClick = { onResetOnSensorTriggerChanged(!resetOnSensorTrigger) }) {
+                    Text(if (resetOnSensorTrigger) "Use pause" else "Use reset")
+                }
+            }
+            Text("Applies to proximity, accelerometer, and microphone triggers.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+        }
+    }
     Spacer(Modifier.height(14.dp))
     Card(
         modifier = Modifier.fillMaxWidth(),
