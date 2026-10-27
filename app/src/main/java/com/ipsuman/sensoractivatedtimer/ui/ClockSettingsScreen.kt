@@ -94,7 +94,7 @@ internal fun SettingsScreen(
             Text("Sensor trigger action", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(6.dp))
             Text(
-                if (resetOnSensorTrigger) "Sensor or microphone triggers reset the selected clock(s) to zero."
+                if (resetOnSensorTrigger) "Sensor triggers reset a running timer to its configured duration and reset a running stopwatch to zero. If stopped, the selected clock starts."
                 else "Sensor or microphone triggers pause a running clock or resume it when paused.",
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
