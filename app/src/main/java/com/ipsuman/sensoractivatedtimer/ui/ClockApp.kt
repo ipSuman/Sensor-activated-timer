@@ -60,8 +60,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ipsuman.sensoractivatedtimer.TimerNotificationHelper
-import com.ipsuman.sensoractivatedtimer.sensor.ProximitySensorController
-import com.ipsuman.sensoractivatedtimer.sensor.AccelerometerController
 import com.ipsuman.sensoractivatedtimer.sensor.MicrophoneTapController
 import com.ipsuman.sensoractivatedtimer.sensor.MicrophoneTriggerMode
 import kotlinx.coroutines.delay
@@ -257,37 +255,17 @@ fun ClockApp(
         }
     })
 
-    DisposableEffect(context, proximityEnabled) {
-        if (!proximityEnabled) {
-            onDispose { }
-        } else {
-            val controller = ProximitySensorController(
-                context = context,
-                onCovered = { latestProximityAction() },
-                onAvailabilityChanged = { proximityAvailable = it },
-                onDistanceChanged = { proximityDistanceCm = it }
-            )
-            controller.start()
-            onDispose { controller.stop() }
-        }
-    }
-
-    DisposableEffect(context, accelerometerEnabled, accelerometerSensitivity) {
-        if (!accelerometerEnabled) {
-            accelerometerAvailable = (context.getSystemService(android.content.Context.SENSOR_SERVICE) as android.hardware.SensorManager)
-                .getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER) != null
-            onDispose { }
-        } else {
-            val controller = AccelerometerController(
-                context = context,
-                sensitivity = accelerometerSensitivity,
-                onShake = { latestAccelerometerAction() },
-                onAvailabilityChanged = { accelerometerAvailable = it }
-            )
-            controller.start()
-            onDispose { controller.stop() }
-        }
-    }
+    ProximityAndAccelerometerEffects(
+        context = context,
+        proximityEnabled = proximityEnabled,
+        accelerometerEnabled = accelerometerEnabled,
+        accelerometerSensitivity = accelerometerSensitivity,
+        onProximityAction = { latestProximityAction() },
+        onProximityAvailabilityChanged = { proximityAvailable = it },
+        onProximityDistanceChanged = { proximityDistanceCm = it },
+        onAccelerometerAction = { latestAccelerometerAction() },
+        onAccelerometerAvailabilityChanged = { accelerometerAvailable = it }
+    )
 
     val latestToneHoldAction by rememberUpdatedState<(Boolean) -> Unit>({ active ->
         if (active) {
