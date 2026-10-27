@@ -87,12 +87,6 @@ fun ClockApp(
         historyEntries = (listOf(ClockHistoryEntry(System.currentTimeMillis(), kind, reading)) + historyEntries).take(200)
         saveClockHistory(context, historyEntries)
     }
-    fun recordTimerResetReading() {
-        if (remainingSeconds > 0) recordHistory("Timer", formatTime(remainingSeconds))
-    }
-    fun recordStopwatchResetReading() {
-        if (stopwatchMillis > 0L) recordHistory("Stopwatch", formatStopwatch(stopwatchMillis))
-    }
     fun deleteHistoryDate(date: String) {
         historyEntries = historyEntries.filterNot { it.dateLabel() == date }
         saveClockHistory(context, historyEntries)
@@ -108,6 +102,12 @@ fun ClockApp(
     var timerRunning by clockState.timerRunning
     var stopwatchRunning by clockState.stopwatchRunning
     var stopwatchMillis by clockState.stopwatchMillis
+    fun recordTimerResetReading() {
+        if (remainingSeconds > 0) recordHistory("Timer", formatTime(remainingSeconds))
+    }
+    fun recordStopwatchResetReading() {
+        if (stopwatchMillis > 0L) recordHistory("Stopwatch", formatStopwatch(stopwatchMillis))
+    }
     var proximityAvailable by remember { mutableStateOf(true) }
     var proximityDistanceCm by remember { mutableStateOf<Float?>(null) }
     var microphoneLevel by remember { mutableStateOf(0f) }
