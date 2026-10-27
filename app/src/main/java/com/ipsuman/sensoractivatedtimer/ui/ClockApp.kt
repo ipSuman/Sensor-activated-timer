@@ -1126,7 +1126,7 @@ private fun SettingsScreen(
                     } else {
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            if (referenceIntensitySaved) "Reference intensity: ${referenceIntensitySaved.let { "saved" }}" else "Record a reference sound to enable intensity tolerance matching.",
+                            if (referenceIntensitySaved) "Reference intensity saved." else "Record a reference sound to enable intensity tolerance matching.",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                         )
