@@ -270,7 +270,7 @@ internal fun SettingsScreen(
                 enabled = accelerometerEnabled && accelerometerAvailable
             )
             Text(
-                "Higher sensitivity detects gentler shakes; lower sensitivity requires a stronger shake. A short cooldown helps prevent repeated triggers.",
+                "Sensitivity decreases exponentially toward 1: level 1 requires a strong shake (about 10 m/s² deviation), while level 10 detects much gentler movement. A short cooldown helps prevent repeated triggers.",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
