@@ -152,13 +152,26 @@ fun ClockApp(
 
     fun triggerActiveWindowClock(reset: Boolean) {
         when (selectedTab) {
-            AppTab.TIMER -> if (reset) { timerRunning = false; remainingSeconds = 0 } else {
-                if (timerRunning) timerRunning = false else {
+            AppTab.TIMER -> {
+                if (reset && timerRunning) {
+                    // A trigger resets an active timer; if stopped, it starts it.
+                    timerRunning = false
+                    remainingSeconds = 0
+                } else if (timerRunning) {
+                    timerRunning = false
+                } else {
                     if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
                     timerRunning = remainingSeconds > 0
                 }
             }
-            AppTab.STOPWATCH -> if (reset) { stopwatchRunning = false; stopwatchMillis = 0L } else stopwatchRunning = !stopwatchRunning
+            AppTab.STOPWATCH -> {
+                if (reset && stopwatchRunning) {
+                    stopwatchRunning = false
+                    stopwatchMillis = 0L
+                } else {
+                    stopwatchRunning = !stopwatchRunning
+                }
+            }
             AppTab.SETTINGS -> Unit
         }
     }
@@ -244,25 +257,27 @@ fun ClockApp(
             ClockTriggerTarget.ACTIVE_WINDOW -> emptyList()
         }
         targets.forEach { clock ->
-            if (resetOnSensorTrigger) {
-                when (clock) {
-                    ClockTriggerTarget.TIMER -> { timerRunning = false; remainingSeconds = 0 }
-                    ClockTriggerTarget.STOPWATCH -> { stopwatchRunning = false; stopwatchMillis = 0L }
-                    ClockTriggerTarget.BOTH -> Unit
-                    ClockTriggerTarget.ACTIVE_WINDOW -> Unit
-                }
-            } else {
-                when (clock) {
-                    ClockTriggerTarget.TIMER -> {
-                        if (timerRunning) timerRunning = false else {
-                            if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
-                            timerRunning = remainingSeconds > 0
-                        }
+            when (clock) {
+                ClockTriggerTarget.TIMER -> {
+                    if (resetOnSensorTrigger && timerRunning) {
+                        timerRunning = false
+                        remainingSeconds = 0
+                    } else if (timerRunning) {
+                        timerRunning = false
+                    } else {
+                        if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
+                        timerRunning = remainingSeconds > 0
                     }
-                    ClockTriggerTarget.STOPWATCH -> stopwatchRunning = !stopwatchRunning
-                    ClockTriggerTarget.BOTH -> Unit
-                    ClockTriggerTarget.ACTIVE_WINDOW -> Unit
                 }
+                ClockTriggerTarget.STOPWATCH -> {
+                    if (resetOnSensorTrigger && stopwatchRunning) {
+                        stopwatchRunning = false
+                        stopwatchMillis = 0L
+                    } else {
+                        stopwatchRunning = !stopwatchRunning
+                    }
+                }
+                ClockTriggerTarget.BOTH, ClockTriggerTarget.ACTIVE_WINDOW -> Unit
             }
         }
     }
