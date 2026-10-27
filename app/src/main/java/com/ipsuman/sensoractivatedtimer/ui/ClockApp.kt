@@ -8,12 +8,7 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -84,6 +79,16 @@ fun ClockApp(
         mutableStateOf(VolumeGestureTarget.entries.getOrElse(volumeGesturePrefs.getInt("target", 0)) { VolumeGestureTarget.TIMER })
     }
     var selectedTab by remember { mutableStateOf(AppTab.TIMER) }
+    var historyEntries by remember(context) { mutableStateOf(loadClockHistory(context)) }
+    fun recordHistory(kind: String, reading: String) {
+        if (reading.isBlank()) return
+        historyEntries = (listOf(ClockHistoryEntry(System.currentTimeMillis(), kind, reading)) + historyEntries).take(200)
+        saveClockHistory(context, historyEntries)
+    }
+    fun deleteHistoryDate(date: String) {
+        historyEntries = historyEntries.filterNot { it.dateLabel() == date }
+        saveClockHistory(context, historyEntries)
+    }
     val clockState = remember { ClockAppState() }
     var currentTime by clockState.currentTime
     var durationInput by clockState.durationInput
@@ -384,14 +389,7 @@ fun ClockApp(
                     modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(20.dp),
                     verticalArrangement = Arrangement.Top
                 ) {
-                    AnimatedContent(
-                        targetState = selectedTab,
-                        label = "tab-content",
-                        transitionSpec = {
-                            (fadeIn(tween(220)) + slideInHorizontally(tween(220)) { it / 12 }) togetherWith
-                                (fadeOut(tween(120)) + slideOutHorizontally(tween(120)) { -it / 12 })
-                        }
-                    ) { tab ->
+                    Crossfade(targetState = selectedTab, animationSpec = tween(180), label = "tab-content") { tab ->
                         when (tab) {
                         AppTab.TIMER -> Column {
                             SensorStatusPanel(microphoneEnabled && microphonePermissionGranted, microphoneHistory, microphoneSpectrum, microphoneSpectrumMode, { microphoneSpectrumMode = !microphoneSpectrumMode }, microphoneLevel, microphonePitchHz, proximityEnabled && proximityAvailable, proximityDistanceCm, accelerometerEnabled && accelerometerAvailable)
@@ -410,8 +408,13 @@ fun ClockApp(
                                 }
                             },
                             onPause = { timerRunning = false },
-                            onReset = { timerRunning = false; remainingSeconds = 0 }
+                            onReset = {
+                                timerRunning = false
+                                if (remainingSeconds > 0) recordHistory("Timer", formatTime(remainingSeconds))
+                                remainingSeconds = 0
+                            }
                             )
+                            ClockHistoryPanel(historyEntries.filter { it.kind == "Timer" }, onDeleteDate = ::deleteHistoryDate)
                         }
                         AppTab.STOPWATCH -> Column {
                             SensorStatusPanel(microphoneEnabled && microphonePermissionGranted, microphoneHistory, microphoneSpectrum, microphoneSpectrumMode, { microphoneSpectrumMode = !microphoneSpectrumMode }, microphoneLevel, microphonePitchHz, proximityEnabled && proximityAvailable, proximityDistanceCm, accelerometerEnabled && accelerometerAvailable)
@@ -419,8 +422,13 @@ fun ClockApp(
                             elapsedMillis = stopwatchMillis,
                             running = stopwatchRunning,
                             onToggle = { stopwatchRunning = !stopwatchRunning },
-                            onReset = { stopwatchRunning = false; stopwatchMillis = 0L }
+                            onReset = {
+                                stopwatchRunning = false
+                                if (stopwatchMillis > 0L) recordHistory("Stopwatch", formatStopwatch(stopwatchMillis))
+                                stopwatchMillis = 0L
+                            }
                             )
+                            ClockHistoryPanel(historyEntries.filter { it.kind == "Stopwatch" }, onDeleteDate = ::deleteHistoryDate)
                         }
                         AppTab.SETTINGS -> SettingsScreen(
                             volumeGestureEnabled = volumeGestureEnabled,
