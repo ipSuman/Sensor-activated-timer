@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ipsuman.sensoractivatedtimer.TimerNotificationHelper
 import com.ipsuman.sensoractivatedtimer.sensor.MicrophoneTapController
+import kotlinx.coroutines.delay
 
 private val DarkColors = darkColorScheme()
 private val LightColors = lightColorScheme()
