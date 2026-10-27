@@ -54,6 +54,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -77,6 +79,8 @@ fun ClockApp(
         mutableStateOf(VolumeGestureTarget.entries.getOrElse(volumeGesturePrefs.getInt("target", 0)) { VolumeGestureTarget.TIMER })
     }
     var selectedTab by remember { mutableStateOf(AppTab.TIMER) }
+    val sensorActionPrefs = remember(context) { context.getSharedPreferences("sensor_action_settings", android.content.Context.MODE_PRIVATE) }
+    var resetOnSensorTrigger by remember { mutableStateOf(sensorActionPrefs.getBoolean("reset_on_trigger", false)) }
     var historyEntries by remember(context) { mutableStateOf(loadClockHistory(context)) }
     fun recordHistory(kind: String, reading: String) {
         if (reading.isBlank()) return
@@ -196,70 +200,36 @@ fun ClockApp(
         }
     }
 
-    // Covering the sensor toggles the selected clock: running clocks pause, paused clocks resume.
-    val latestProximityAction by rememberUpdatedState<() -> Unit>({
-        when (proximityTarget) {
-            ProximityTarget.TIMER -> {
-                if (timerRunning) {
-                    timerRunning = false
-                } else {
-                    if (remainingSeconds == 0) {
-                        remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
+    fun triggerClock(target: ClockTriggerTarget) {
+        val targets = when (target) {
+            ClockTriggerTarget.TIMER -> listOf(ClockTriggerTarget.TIMER)
+            ClockTriggerTarget.STOPWATCH -> listOf(ClockTriggerTarget.STOPWATCH)
+            ClockTriggerTarget.BOTH -> listOf(ClockTriggerTarget.TIMER, ClockTriggerTarget.STOPWATCH)
+        }
+        targets.forEach { clock ->
+            if (resetOnSensorTrigger) {
+                when (clock) {
+                    ClockTriggerTarget.TIMER -> { timerRunning = false; remainingSeconds = 0 }
+                    ClockTriggerTarget.STOPWATCH -> { stopwatchRunning = false; stopwatchMillis = 0L }
+                    ClockTriggerTarget.BOTH -> Unit
+                }
+            } else {
+                when (clock) {
+                    ClockTriggerTarget.TIMER -> {
+                        if (timerRunning) timerRunning = false else {
+                            if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
+                            timerRunning = remainingSeconds > 0
+                        }
                     }
-                    timerRunning = remainingSeconds > 0
+                    ClockTriggerTarget.STOPWATCH -> stopwatchRunning = !stopwatchRunning
+                    ClockTriggerTarget.BOTH -> Unit
                 }
-            }
-            ProximityTarget.STOPWATCH -> stopwatchRunning = !stopwatchRunning
-            ProximityTarget.BOTH -> {
-                if (timerRunning) {
-                    timerRunning = false
-                } else {
-                    if (remainingSeconds == 0) {
-                        remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
-                    }
-                    timerRunning = remainingSeconds > 0
-                }
-                stopwatchRunning = !stopwatchRunning
             }
         }
-    })
-    val latestAccelerometerAction by rememberUpdatedState<() -> Unit>({
-        when (accelerometerTarget) {
-            AccelerometerTarget.TIMER -> {
-                if (timerRunning) timerRunning = false else {
-                    if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
-                    timerRunning = remainingSeconds > 0
-                }
-            }
-            AccelerometerTarget.STOPWATCH -> stopwatchRunning = !stopwatchRunning
-            AccelerometerTarget.BOTH -> {
-                if (timerRunning) timerRunning = false else {
-                    if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
-                    timerRunning = remainingSeconds > 0
-                }
-                stopwatchRunning = !stopwatchRunning
-            }
-        }
-    })
-
-    val latestMicrophoneAction by rememberUpdatedState<() -> Unit>({
-        when (microphoneTarget) {
-            MicrophoneTarget.TIMER -> {
-                if (timerRunning) timerRunning = false else {
-                    if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
-                    timerRunning = remainingSeconds > 0
-                }
-            }
-            MicrophoneTarget.STOPWATCH -> stopwatchRunning = !stopwatchRunning
-            MicrophoneTarget.BOTH -> {
-                if (timerRunning) timerRunning = false else {
-                    if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
-                    timerRunning = remainingSeconds > 0
-                }
-                stopwatchRunning = !stopwatchRunning
-            }
-        }
-    })
+    }
+    val latestProximityAction by rememberUpdatedState<() -> Unit>({ triggerClock(proximityTarget.toClockTriggerTarget()) })
+    val latestAccelerometerAction by rememberUpdatedState<() -> Unit>({ triggerClock(accelerometerTarget.toClockTriggerTarget()) })
+    val latestMicrophoneAction by rememberUpdatedState<() -> Unit>({ triggerClock(microphoneTarget.toClockTriggerTarget()) })
 
     ProximityAndAccelerometerEffects(
         context = context,
@@ -274,7 +244,10 @@ fun ClockApp(
     )
 
     val latestToneHoldAction by rememberUpdatedState<(Boolean) -> Unit>({ active ->
-        if (active) {
+        if (resetOnSensorTrigger) {
+            if (active && !toneHoldWasActive) triggerClock(microphoneTarget.toClockTriggerTarget())
+            toneHoldWasActive = active
+        } else if (active) {
             toneHoldWasActive = true
             when (microphoneTarget) {
                 MicrophoneTarget.TIMER -> {
@@ -293,10 +266,7 @@ fun ClockApp(
             when (microphoneTarget) {
                 MicrophoneTarget.TIMER -> timerRunning = false
                 MicrophoneTarget.STOPWATCH -> stopwatchRunning = false
-                MicrophoneTarget.BOTH -> {
-                    timerRunning = false
-                    stopwatchRunning = false
-                }
+                MicrophoneTarget.BOTH -> { timerRunning = false; stopwatchRunning = false }
             }
         }
     })
@@ -389,7 +359,18 @@ fun ClockApp(
                 }
             ) { padding ->
                 Column(
-                    modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(20.dp),
+                    modifier = Modifier.fillMaxSize().padding(padding).pointerInput(selectedTab) {
+                        var totalDrag = 0f
+                        detectHorizontalDragGestures(
+                            onHorizontalDrag = { _, dragAmount -> totalDrag += dragAmount },
+                            onDragEnd = {
+                                if (totalDrag < -80f) selectedTab = AppTab.entries[(selectedTab.ordinal + 1).coerceAtMost(AppTab.entries.lastIndex)]
+                                else if (totalDrag > 80f) selectedTab = AppTab.entries[(selectedTab.ordinal - 1).coerceAtLeast(0)]
+                                totalDrag = 0f
+                            },
+                            onDragCancel = { totalDrag = 0f }
+                        )
+                    }.verticalScroll(rememberScrollState()).padding(20.dp),
                     verticalArrangement = Arrangement.Top
                 ) {
                     when (selectedTab) {
@@ -433,6 +414,11 @@ fun ClockApp(
                             ClockHistoryPanel(historyEntries.filter { it.kind == "Stopwatch" }, onDeleteDate = ::deleteHistoryDate)
                         }
                         AppTab.SETTINGS -> SettingsScreen(
+                            resetOnSensorTrigger = resetOnSensorTrigger,
+                            onResetOnSensorTriggerChanged = { enabled ->
+                                resetOnSensorTrigger = enabled
+                                sensorActionPrefs.edit().putBoolean("reset_on_trigger", enabled).apply()
+                            },
                             volumeGestureEnabled = volumeGestureEnabled,
                             onVolumeGestureChanged = { enabled ->
                                 volumeGestureEnabled = enabled
