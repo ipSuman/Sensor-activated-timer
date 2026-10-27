@@ -8,6 +8,13 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -377,7 +384,15 @@ fun ClockApp(
                     modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(20.dp),
                     verticalArrangement = Arrangement.Top
                 ) {
-                    when (selectedTab) {
+                    AnimatedContent(
+                        targetState = selectedTab,
+                        label = "tab-content",
+                        transitionSpec = {
+                            (fadeIn(tween(220)) + slideInHorizontally(tween(220)) { it / 12 }) togetherWith
+                                (fadeOut(tween(120)) + slideOutHorizontally(tween(120)) { -it / 12 })
+                        }
+                    ) { tab ->
+                        when (tab) {
                         AppTab.TIMER -> Column {
                             SensorStatusPanel(microphoneEnabled && microphonePermissionGranted, microphoneHistory, microphoneSpectrum, microphoneSpectrumMode, { microphoneSpectrumMode = !microphoneSpectrumMode }, microphoneLevel, microphonePitchHz, proximityEnabled && proximityAvailable, proximityDistanceCm, accelerometerEnabled && accelerometerAvailable)
                             TimerScreen(
@@ -510,6 +525,7 @@ fun ClockApp(
                                 }
                             }
                         )
+                    }
                     }
                 }
             }
