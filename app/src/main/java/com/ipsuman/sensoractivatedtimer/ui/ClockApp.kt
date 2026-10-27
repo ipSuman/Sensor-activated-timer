@@ -145,6 +145,26 @@ fun ClockApp(
     var notificationsEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("timer_notifications_enabled", false)) }
     var notificationPermissionGranted by remember { mutableStateOf(TimerNotificationHelper.hasPermission(context)) }
 
+    fun triggerActiveWindowClock(reset: Boolean) {
+        when (selectedTab) {
+            AppTab.TIMER -> if (reset) { timerRunning = false; remainingSeconds = 0 } else {
+                if (timerRunning) timerRunning = false else {
+                    if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
+                    timerRunning = remainingSeconds > 0
+                }
+            }
+            AppTab.STOPWATCH -> if (reset) { stopwatchRunning = false; stopwatchMillis = 0L } else stopwatchRunning = !stopwatchRunning
+            AppTab.SETTINGS -> Unit
+        }
+    }
+    fun pauseActiveWindowClock() {
+        when (selectedTab) {
+            AppTab.TIMER -> timerRunning = false
+            AppTab.STOPWATCH -> stopwatchRunning = false
+            AppTab.SETTINGS -> Unit
+        }
+    }
+
     val latestVolumeGestureAction by rememberUpdatedState<() -> Unit>({
         when (volumeGestureTarget) {
             VolumeGestureTarget.TIMER -> {
@@ -294,6 +314,14 @@ fun ClockApp(
                     timerRunning = remainingSeconds > 0
                     stopwatchRunning = true
                 }
+                MicrophoneTarget.ACTIVE_WINDOW -> when (selectedTab) {
+                    AppTab.TIMER -> {
+                        if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
+                        timerRunning = remainingSeconds > 0
+                    }
+                    AppTab.STOPWATCH -> stopwatchRunning = true
+                    AppTab.SETTINGS -> Unit
+                }
             }
         } else if (toneHoldWasActive) {
             toneHoldWasActive = false
@@ -301,6 +329,7 @@ fun ClockApp(
                 MicrophoneTarget.TIMER -> timerRunning = false
                 MicrophoneTarget.STOPWATCH -> stopwatchRunning = false
                 MicrophoneTarget.BOTH -> { timerRunning = false; stopwatchRunning = false }
+                MicrophoneTarget.ACTIVE_WINDOW -> pauseActiveWindowClock()
             }
         }
     })
