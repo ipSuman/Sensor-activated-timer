@@ -81,6 +81,8 @@ fun ClockApp(
     var selectedTab by remember { mutableStateOf(AppTab.TIMER) }
     val sensorActionPrefs = remember(context) { context.getSharedPreferences("sensor_action_settings", android.content.Context.MODE_PRIVATE) }
     var resetOnSensorTrigger by remember { mutableStateOf(sensorActionPrefs.getBoolean("reset_on_trigger", false)) }
+    var sensorListeningIntervalMs by remember { mutableIntStateOf(sensorActionPrefs.getInt("listening_interval_ms", 100).coerceIn(10, 1000)) }
+    var lastSensorInputAt by remember { mutableLongStateOf(0L) }
     var historyEntries by remember(context) { mutableStateOf(loadClockHistory(context)) }
     fun recordHistory(kind: String, reading: String) {
         if (reading.isBlank()) return
@@ -255,6 +257,10 @@ fun ClockApp(
     }
 
     fun triggerClock(target: ClockTriggerTarget) {
+        // Apply one shared minimum interval to proximity, accelerometer and microphone triggers.
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (lastSensorInputAt != 0L && now - lastSensorInputAt < sensorListeningIntervalMs.toLong()) return
+        lastSensorInputAt = now
         if (target == ClockTriggerTarget.ACTIVE_WINDOW) {
             triggerActiveWindowClock(resetOnSensorTrigger)
             return
@@ -480,6 +486,11 @@ fun ClockApp(
                             StopwatchScreen(
                             elapsedMillis = stopwatchMillis,
                             running = stopwatchRunning,
+                            sensorListeningIntervalMs = sensorListeningIntervalMs,
+                            onSensorListeningIntervalChanged = { value ->
+                                sensorListeningIntervalMs = value.coerceIn(10, 1000)
+                                sensorActionPrefs.edit().putInt("listening_interval_ms", sensorListeningIntervalMs).apply()
+                            },
                             onToggle = { stopwatchRunning = !stopwatchRunning },
                             onReset = {
                                 stopwatchRunning = false
