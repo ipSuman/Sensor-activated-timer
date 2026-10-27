@@ -81,6 +81,8 @@ fun ClockApp(
     var selectedTab by remember { mutableStateOf(AppTab.TIMER) }
     val sensorActionPrefs = remember(context) { context.getSharedPreferences("sensor_action_settings", android.content.Context.MODE_PRIVATE) }
     var resetOnSensorTrigger by remember { mutableStateOf(sensorActionPrefs.getBoolean("reset_on_trigger", false)) }
+    var sensorFusionEnabled by remember { mutableStateOf(sensorActionPrefs.getBoolean("sensor_fusion_enabled", false)) }
+    var fusionSignals by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
     var cameraEnabled by remember { mutableStateOf(sensorActionPrefs.getBoolean("camera_enabled", false)) }
     var cameraFront by remember { mutableStateOf(sensorActionPrefs.getBoolean("camera_front", false)) }
     var cameraTarget by remember { mutableStateOf(CameraTarget.entries.getOrElse(sensorActionPrefs.getInt("camera_target", CameraTarget.ACTIVE_WINDOW.ordinal)) { CameraTarget.ACTIVE_WINDOW }) }
@@ -311,10 +313,34 @@ fun ClockApp(
             }
         }
     }
-    val latestCameraAction by rememberUpdatedState<() -> Unit>({ triggerClock(cameraTarget.toClockTriggerTarget()) })
-    val latestProximityAction by rememberUpdatedState<() -> Unit>({ triggerClock(proximityTarget.toClockTriggerTarget()) })
-    val latestAccelerometerAction by rememberUpdatedState<() -> Unit>({ triggerClock(accelerometerTarget.toClockTriggerTarget()) })
-    val latestMicrophoneAction by rememberUpdatedState<() -> Unit>({ triggerClock(microphoneTarget.toClockTriggerTarget()) })
+    fun signalSensor(source: String, target: ClockTriggerTarget) {
+        if (!sensorFusionEnabled) {
+            triggerClock(target)
+            return
+        }
+        val now = android.os.SystemClock.elapsedRealtime()
+        val activeSensors = buildSet {
+            if (proximityEnabled && proximityAvailable) add("proximity")
+            if (accelerometerEnabled && accelerometerAvailable) add("accelerometer")
+            if (microphoneEnabled && microphonePermissionGranted) add("microphone")
+            if (cameraEnabled && cameraPermissionGranted && cameraAvailable) add("camera")
+        }
+        if (source !in activeSensors || activeSensors.isEmpty()) return
+        val freshSignals = fusionSignals.filterValues { now - it <= 1200L }.toMutableMap()
+        freshSignals[source] = now
+        fusionSignals = freshSignals
+        if (activeSensors.all { sensor -> freshSignals[sensor] != null }) {
+            val times = activeSensors.mapNotNull { freshSignals[it] }
+            if (times.isNotEmpty() && times.maxOrNull()!! - times.minOrNull()!! <= 1200L) {
+                fusionSignals = emptyMap()
+                triggerClock(target)
+            }
+        }
+    }
+    val latestCameraAction by rememberUpdatedState<() -> Unit>({ signalSensor("camera", cameraTarget.toClockTriggerTarget()) })
+    val latestProximityAction by rememberUpdatedState<() -> Unit>({ signalSensor("proximity", proximityTarget.toClockTriggerTarget()) })
+    val latestAccelerometerAction by rememberUpdatedState<() -> Unit>({ signalSensor("accelerometer", accelerometerTarget.toClockTriggerTarget()) })
+    val latestMicrophoneAction by rememberUpdatedState<() -> Unit>({ signalSensor("microphone", microphoneTarget.toClockTriggerTarget()) })
 
     ProximityAndAccelerometerEffects(
         context = context,
@@ -329,7 +355,10 @@ fun ClockApp(
     )
 
     val latestToneHoldAction by rememberUpdatedState<(Boolean) -> Unit>({ active ->
-        if (resetOnSensorTrigger) {
+        if (sensorFusionEnabled) {
+            if (active && !toneHoldWasActive) signalSensor("microphone", microphoneTarget.toClockTriggerTarget())
+            toneHoldWasActive = active
+        } else if (resetOnSensorTrigger) {
             if (active && !toneHoldWasActive) triggerClock(microphoneTarget.toClockTriggerTarget())
             toneHoldWasActive = active
         } else if (active) {
@@ -531,6 +560,12 @@ fun ClockApp(
                             onResetOnSensorTriggerChanged = { enabled ->
                                 resetOnSensorTrigger = enabled
                                 sensorActionPrefs.edit().putBoolean("reset_on_trigger", enabled).apply()
+                            },
+                            sensorFusionEnabled = sensorFusionEnabled,
+                            onSensorFusionEnabledChanged = { enabled ->
+                                sensorFusionEnabled = enabled
+                                fusionSignals = emptyMap()
+                                sensorActionPrefs.edit().putBoolean("sensor_fusion_enabled", enabled).apply()
                             },
                             volumeGestureEnabled = volumeGestureEnabled,
                             onVolumeGestureChanged = { enabled ->
