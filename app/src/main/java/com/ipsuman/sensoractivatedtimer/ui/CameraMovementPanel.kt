@@ -23,6 +23,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -41,6 +44,8 @@ internal fun CameraMovementPanel(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val previewView = remember { PreviewView(context).apply { scaleType = PreviewView.ScaleType.FILL_CENTER } }
+    var torchEnabled by remember { mutableStateOf(false) }
+    var activeCamera by remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
     DisposableEffect(lifecycleOwner, frontCamera, previewView) {
         val analysisExecutor = Executors.newSingleThreadExecutor()
         val providerFuture = ProcessCameraProvider.getInstance(context)
@@ -79,13 +84,17 @@ internal fun CameraMovementPanel(
                     .requireLensFacing(if (frontCamera) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK)
                     .build()
                 cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(lifecycleOwner, selector, preview, analysis)
+                activeCamera = cameraProvider.bindToLifecycle(lifecycleOwner, selector, preview, analysis)
+                activeCamera?.cameraControl?.enableTorch(torchEnabled)
             } catch (_: Exception) {
                 // If this camera cannot be opened, the rest of the clock app remains usable.
             }
         }
         providerFuture.addListener(listener, mainExecutor)
         onDispose {
+            try { activeCamera?.cameraControl?.enableTorch(false) } catch (_: Exception) { }
+            torchEnabled = false
+            activeCamera = null
             try { provider?.unbindAll() } catch (_: Exception) { }
             analysisExecutor.shutdown()
         }
@@ -99,12 +108,24 @@ internal fun CameraMovementPanel(
         Column(Modifier.fillMaxWidth().padding(12.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Camera movement", style = MaterialTheme.typography.titleSmall)
-                Button(onClick = onToggleCamera) { Text(if (frontCamera) "Front camera" else "Back camera") }
             }
             AndroidView(
                 factory = { previewView },
                 modifier = Modifier.fillMaxWidth().height(150.dp)
             )
+            Button(
+                onClick = onToggleCamera,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            ) { Text(if (frontCamera) "Switch to back camera" else "Switch to front camera") }
+            Button(
+                onClick = {
+                    val nextState = !torchEnabled
+                    activeCamera?.cameraControl?.enableTorch(nextState)
+                    torchEnabled = nextState
+                },
+                enabled = activeCamera != null,
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+            ) { Text(if (torchEnabled) "Torch: On" else "Torch") }
             Text(
                 "Movement in the camera view triggers the selected clock.",
                 style = MaterialTheme.typography.bodySmall,
