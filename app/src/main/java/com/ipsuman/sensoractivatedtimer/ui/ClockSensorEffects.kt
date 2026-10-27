@@ -17,7 +17,7 @@ internal fun ProximityAndAccelerometerEffects(
     context: Context,
     proximityEnabled: Boolean,
     accelerometerEnabled: Boolean,
-    accelerometerSensitivity: Float,
+    accelerometerSensitivity: Int,
     onProximityAction: () -> Unit,
     onProximityAvailabilityChanged: (Boolean) -> Unit,
     onProximityDistanceChanged: (Float) -> Unit,
