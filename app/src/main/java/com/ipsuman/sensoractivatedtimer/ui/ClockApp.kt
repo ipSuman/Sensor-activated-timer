@@ -71,31 +71,6 @@ import java.time.format.DateTimeFormatter
 private val DarkColors = darkColorScheme()
 private val LightColors = lightColorScheme()
 
-private enum class AppTab(val title: String) {
-    TIMER("Timer"), STOPWATCH("Stopwatch"), SETTINGS("Settings")
-}
-
-private enum class ProximityTarget(val label: String) {
-    TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")
-}
-
-private enum class AccelerometerTarget(val label: String) {
-    TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")
-}
-
-private enum class MicrophoneTarget(val label: String) {
-    TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")
-}
-
-private enum class VolumeGestureTarget(val label: String) {
-    TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both")
-}
-
-private enum class MicrophoneMode(val label: String, val description: String) {
-    RECORDED_SOUND("Recorded sound", "Record a reference sound, then match its intensity and duration using the tolerances below."),
-    TONE("Tone / music", "Hold a clock while sound intensity stays above the threshold or within a saved reference tolerance.")
-}
-
 @Composable
 fun ClockApp(
     onVolumeGestureHandlerChanged: ((() -> Unit)?) -> Unit,
