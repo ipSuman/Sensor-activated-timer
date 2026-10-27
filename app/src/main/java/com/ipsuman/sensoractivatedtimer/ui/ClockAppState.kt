@@ -46,3 +46,21 @@ internal enum class MicrophoneMode(val label: String, val description: String) {
     TONE("Tone / music", "Hold a clock while sound intensity stays above the threshold or within a saved reference tolerance.")
 }
 
+
+internal enum class ClockTriggerTarget { TIMER, STOPWATCH, BOTH }
+
+internal fun ProximityTarget.toClockTriggerTarget(): ClockTriggerTarget = when (this) {
+    ProximityTarget.TIMER -> ClockTriggerTarget.TIMER
+    ProximityTarget.STOPWATCH -> ClockTriggerTarget.STOPWATCH
+    ProximityTarget.BOTH -> ClockTriggerTarget.BOTH
+}
+internal fun AccelerometerTarget.toClockTriggerTarget(): ClockTriggerTarget = when (this) {
+    AccelerometerTarget.TIMER -> ClockTriggerTarget.TIMER
+    AccelerometerTarget.STOPWATCH -> ClockTriggerTarget.STOPWATCH
+    AccelerometerTarget.BOTH -> ClockTriggerTarget.BOTH
+}
+internal fun MicrophoneTarget.toClockTriggerTarget(): ClockTriggerTarget = when (this) {
+    MicrophoneTarget.TIMER -> ClockTriggerTarget.TIMER
+    MicrophoneTarget.STOPWATCH -> ClockTriggerTarget.STOPWATCH
+    MicrophoneTarget.BOTH -> ClockTriggerTarget.BOTH
+}
