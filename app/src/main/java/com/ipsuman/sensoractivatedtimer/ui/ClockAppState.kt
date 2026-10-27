@@ -67,3 +67,13 @@ internal fun MicrophoneTarget.toClockTriggerTarget(): ClockTriggerTarget = when 
     MicrophoneTarget.BOTH -> ClockTriggerTarget.BOTH
     MicrophoneTarget.ACTIVE_WINDOW -> ClockTriggerTarget.ACTIVE_WINDOW
 }
+
+internal enum class CameraTarget(val label: String) {
+    TIMER("Timer"), STOPWATCH("Stopwatch"), BOTH("Both"), ACTIVE_WINDOW("Active window")
+}
+internal fun CameraTarget.toClockTriggerTarget(): ClockTriggerTarget = when (this) {
+    CameraTarget.TIMER -> ClockTriggerTarget.TIMER
+    CameraTarget.STOPWATCH -> ClockTriggerTarget.STOPWATCH
+    CameraTarget.BOTH -> ClockTriggerTarget.BOTH
+    CameraTarget.ACTIVE_WINDOW -> ClockTriggerTarget.ACTIVE_WINDOW
+}
