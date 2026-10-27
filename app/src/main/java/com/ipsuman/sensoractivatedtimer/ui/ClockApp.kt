@@ -53,6 +53,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -118,6 +119,8 @@ fun ClockApp(
     var microphoneLevel by remember { mutableStateOf(0f) }
     var microphonePitchHz by remember { mutableIntStateOf(0) }
     var microphoneHistory by remember { mutableStateOf<List<Float>>(emptyList()) }
+    var microphoneSpectrum by remember { mutableStateOf<List<Float>>(emptyList()) }
+    var microphoneSpectrumMode by remember { mutableStateOf(false) }
     var proximityEnabled by remember { mutableStateOf(true) }
     var proximityTarget by remember { mutableStateOf(ProximityTarget.TIMER) }
     var accelerometerAvailable by remember { mutableStateOf(true) }
@@ -346,6 +349,7 @@ fun ClockApp(
                     microphonePitchHz = pitchHz
                     microphoneHistory = (microphoneHistory + intensity.toFloat()).takeLast(48)
                 },
+                onSpectrumMetrics = { bins -> microphoneSpectrum = bins },
                 onReferenceSoundChanged = { intensity, durationMs, pitchHz ->
                     referenceIntensity = intensity
                     referenceDurationMs = durationMs
@@ -462,7 +466,7 @@ fun ClockApp(
                 ) {
                     when (selectedTab) {
                         AppTab.TIMER -> Column {
-                            SensorStatusPanel(microphoneEnabled && microphonePermissionGranted, microphoneHistory, microphoneLevel, microphonePitchHz, proximityEnabled && proximityAvailable, proximityDistanceCm, accelerometerEnabled && accelerometerAvailable)
+                            SensorStatusPanel(microphoneEnabled && microphonePermissionGranted, microphoneHistory, microphoneSpectrum, microphoneSpectrumMode, { microphoneSpectrumMode = !microphoneSpectrumMode }, microphoneLevel, microphonePitchHz, proximityEnabled && proximityAvailable, proximityDistanceCm, accelerometerEnabled && accelerometerAvailable)
                             TimerScreen(
                             durationInput = durationInput,
                             onDurationChange = { durationInput = it.filter(Char::isDigit).take(5) },
@@ -482,7 +486,7 @@ fun ClockApp(
                             )
                         }
                         AppTab.STOPWATCH -> Column {
-                            SensorStatusPanel(microphoneEnabled && microphonePermissionGranted, microphoneHistory, microphoneLevel, microphonePitchHz, proximityEnabled && proximityAvailable, proximityDistanceCm, accelerometerEnabled && accelerometerAvailable)
+                            SensorStatusPanel(microphoneEnabled && microphonePermissionGranted, microphoneHistory, microphoneSpectrum, microphoneSpectrumMode, { microphoneSpectrumMode = !microphoneSpectrumMode }, microphoneLevel, microphonePitchHz, proximityEnabled && proximityAvailable, proximityDistanceCm, accelerometerEnabled && accelerometerAvailable)
                             StopwatchScreen(
                             elapsedMillis = stopwatchMillis,
                             running = stopwatchRunning,
@@ -603,6 +607,9 @@ fun ClockApp(
 private fun SensorStatusPanel(
     microphoneActive: Boolean,
     microphoneHistory: List<Float>,
+    microphoneSpectrum: List<Float>,
+    microphoneSpectrumMode: Boolean,
+    onGraphTap: () -> Unit,
     microphoneLevel: Float,
     microphonePitchHz: Int,
     proximityActive: Boolean,
@@ -617,7 +624,7 @@ private fun SensorStatusPanel(
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
             if (microphoneActive) {
-                Text("🎙 Microphone intensity", fontWeight = FontWeight.Bold)
+                Text("🎙 Microphone graph", fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
                 Text("Current pitch: ${if (microphonePitchHz > 0) "$microphonePitchHz Hz" else "— Hz"}")
                 Text("Intensity (RMS): ${microphoneLevel.toInt()}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -625,29 +632,60 @@ private fun SensorStatusPanel(
                 Text("Intensity ↑", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 val graphOutlineColor = MaterialTheme.colorScheme.outline
                 val graphPrimaryColor = MaterialTheme.colorScheme.primary
-                Canvas(Modifier.fillMaxWidth().height(120.dp)) {
-                    val values = microphoneHistory
-                    val left = 8f
+                Canvas(Modifier.fillMaxWidth().height(140.dp).clickable(onClick = onGraphTap)) {
+                    val left = 34f
                     val right = size.width - 8f
                     val top = 8f
-                    val bottom = size.height - 22f
+                    val bottom = size.height - 24f
                     val graphHeight = bottom - top
                     val graphWidth = right - left
                     drawLine(graphOutlineColor, Offset(left, top), Offset(left, bottom), strokeWidth = 1.dp.toPx())
                     drawLine(graphOutlineColor, Offset(left, bottom), Offset(right, bottom), strokeWidth = 1.dp.toPx())
-                    if (values.size > 1) {
-                        val maxValue = maxOf(values.maxOrNull() ?: 1f, 1f)
-                        val path = Path()
-                        values.forEachIndexed { index, value ->
-                            val x = left + graphWidth * index / (values.size - 1).toFloat()
-                            val y = bottom - (value / maxValue).coerceIn(0f, 1f) * graphHeight
-                            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                    if (microphoneSpectrumMode) {
+                        val sampleRate = 44100f
+                        val fftSize = 2048f
+                        val minHz = 20f
+                        val maxHz = 20000f
+                        val points = microphoneSpectrum.mapIndexedNotNull { index, magnitude ->
+                            val hz = index * sampleRate / fftSize
+                            if (hz < minHz || hz > maxHz) null else hz to magnitude
                         }
-                        drawPath(path, color = graphPrimaryColor, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+                        val maxValue = maxOf(points.maxOfOrNull { it.second } ?: 1f, 1e-6f)
+                        if (points.size > 1) {
+                            val path = Path()
+                            points.forEachIndexed { index, point ->
+                                val logPosition = (kotlin.math.ln((point.first / minHz).toDouble()) / kotlin.math.ln((maxHz / minHz).toDouble())).toFloat().coerceIn(0f, 1f)
+                                val x = left + graphWidth * logPosition
+                                val y = bottom - (point.second / maxValue).coerceIn(0f, 1f) * graphHeight
+                                if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                            }
+                            drawPath(path, color = graphPrimaryColor, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+                        }
+                    } else {
+                        val values = microphoneHistory
+                        if (values.size > 1) {
+                            val maxValue = maxOf(values.maxOrNull() ?: 1f, 1f)
+                            val path = Path()
+                            values.forEachIndexed { index, value ->
+                                val x = left + graphWidth * index / (values.size - 1).toFloat()
+                                val y = bottom - (value / maxValue).coerceIn(0f, 1f) * graphHeight
+                                if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                            }
+                            drawPath(path, color = graphPrimaryColor, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+                        }
                     }
                 }
-                Text("Time →", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.End))
-                Text("Legend: current pitch in Hz • X axis: time • Y axis: intensity", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (microphoneSpectrumMode) {
+                    Row(Modifier.fillMaxWidth().padding(start = 28.dp, end = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("20 Hz", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("1 kHz", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("20 kHz", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text("X axis: frequency (Hz, logarithmic) • Y axis: intensity • Tap graph to show time", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    Text("Time →", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.End))
+                    Text("X axis: time • Y axis: intensity • Tap graph to show frequency", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Spacer(Modifier.height(12.dp))
             }
             if (proximityActive) {
