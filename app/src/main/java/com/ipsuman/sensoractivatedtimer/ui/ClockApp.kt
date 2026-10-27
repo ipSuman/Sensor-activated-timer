@@ -93,7 +93,7 @@ private enum class VolumeGestureTarget(val label: String) {
 
 private enum class MicrophoneMode(val label: String, val description: String) {
     RECORDED_SOUND("Recorded sound", "Record a reference sound, then match its intensity and duration using the tolerances below."),
-    TONE("Tone / music", "Hold a clock while sound intensity or a reference pitch remains matched.")
+    TONE("Tone / music", "Hold a clock while sound intensity stays above the threshold or within a saved reference tolerance.")
 }
 
 @Composable
