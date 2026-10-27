@@ -31,6 +31,7 @@ class MicrophoneTapController(
     durationTolerancePercent: Int = 30,
     pitchTolerancePercent: Int = 20,
     private val onAudioMetrics: (Double, Int) -> Unit = { _, _ -> },
+    private val onSpectrumMetrics: (List<Float>) -> Unit = {},
     private val onReferenceSoundChanged: (Double, Long, Int) -> Unit = { _, _, _ -> },
     private val holdWhileToneActive: Boolean = false,
     private val onToneActivityChanged: (Boolean) -> Unit = {},
@@ -76,7 +77,8 @@ class MicrophoneTapController(
             return
         }
 
-        val sampleRate = 16000
+        // 44.1 kHz sampling captures the audible range up to 20 kHz (Nyquist: 22.05 kHz).
+        val sampleRate = 44100
         val minBuffer = AudioRecord.getMinBufferSize(
             sampleRate,
             AudioFormat.CHANNEL_IN_MONO,
@@ -93,7 +95,7 @@ class MicrophoneTapController(
                 sampleRate,
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT,
-                maxOf(minBuffer, 2048)
+                maxOf(minBuffer, 8192)
             )
             if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
                 audioRecord.release()
@@ -104,7 +106,7 @@ class MicrophoneTapController(
             running = true
             audioRecord.startRecording()
             worker = Thread({
-                val buffer = ShortArray(1024)
+                val buffer = ShortArray(2048)
                 var noiseFloor = 500.0
                 var aboveThreshold = false
                 var referenceEventStartedAt = 0L
@@ -129,7 +131,13 @@ class MicrophoneTapController(
                         }
                         val rms = sqrt(sumSquares / count)
                         val pitchHz = estimatePitchHz(buffer, count, sampleRate)
-                        mainHandler.post { if (running) onAudioMetrics(rms, pitchHz) }
+                        val spectrum = calculateSpectrum(buffer, count, sampleRate)
+                        mainHandler.post {
+                            if (running) {
+                                onAudioMetrics(rms, pitchHz)
+                                onSpectrumMetrics(spectrum)
+                            }
+                        }
                         val threshold = maxOf(toneMinimumIntensity, noiseFloor * 2.8)
                         val now = System.currentTimeMillis()
 
@@ -239,6 +247,60 @@ class MicrophoneTapController(
             running = false
             recorder = null
             mainHandler.post { onError("Unable to start microphone: ${e.message ?: "unknown error"}") }
+        }
+    }
+
+    /** Return FFT magnitudes for bins 0..Nyquist; a Hann window reduces spectral leakage. */
+    private fun calculateSpectrum(samples: ShortArray, count: Int, sampleRate: Int): List<Float> {
+        val n = 2048
+        if (count < n) return emptyList()
+        val real = DoubleArray(n)
+        val imag = DoubleArray(n)
+        for (i in 0 until n) {
+            val hann = 0.5 - 0.5 * kotlin.math.cos(2.0 * Math.PI * i / (n - 1))
+            real[i] = samples[i].toDouble() * hann
+        }
+        var j = 0
+        for (i in 1 until n) {
+            var bit = n shr 1
+            while ((j and bit) != 0) {
+                j = j xor bit
+                bit = bit shr 1
+            }
+            j = j xor bit
+            if (i < j) {
+                val tr = real[i]; real[i] = real[j]; real[j] = tr
+                val ti = imag[i]; imag[i] = imag[j]; imag[j] = ti
+            }
+        }
+        var length = 2
+        while (length <= n) {
+            val angle = -2.0 * Math.PI / length
+            val wLenReal = kotlin.math.cos(angle)
+            val wLenImag = kotlin.math.sin(angle)
+            var start = 0
+            while (start < n) {
+                var wReal = 1.0
+                var wImag = 0.0
+                for (offset in 0 until length / 2) {
+                    val even = start + offset
+                    val odd = even + length / 2
+                    val oddReal = real[odd] * wReal - imag[odd] * wImag
+                    val oddImag = real[odd] * wImag + imag[odd] * wReal
+                    real[odd] = real[even] - oddReal
+                    imag[odd] = imag[even] - oddImag
+                    real[even] += oddReal
+                    imag[even] += oddImag
+                    val nextWReal = wReal * wLenReal - wImag * wLenImag
+                    wImag = wReal * wLenImag + wImag * wLenReal
+                    wReal = nextWReal
+                }
+                start += length
+            }
+            length = length shl 1
+        }
+        return (0..n / 2).map { bin ->
+            (kotlin.math.sqrt(real[bin] * real[bin] + imag[bin] * imag[bin]) / n).toFloat()
         }
     }
 
