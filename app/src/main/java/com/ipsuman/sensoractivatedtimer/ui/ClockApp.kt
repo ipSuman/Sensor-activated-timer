@@ -355,13 +355,10 @@ fun ClockApp(
     )
 
     val latestToneHoldAction by rememberUpdatedState<(Boolean) -> Unit>({ active ->
-        if (sensorFusionEnabled) {
-            if (active && !toneHoldWasActive) signalSensor("microphone", microphoneTarget.toClockTriggerTarget())
-            toneHoldWasActive = active
-        } else if (resetOnSensorTrigger) {
-            if (active && !toneHoldWasActive) triggerClock(microphoneTarget.toClockTriggerTarget())
-            toneHoldWasActive = active
-        } else if (active) {
+        // "Run clock while tone plays" is a hold-to-run mode, not a one-shot sensor trigger.
+        // Start only on the rising edge, and stop/reset on the falling edge regardless of
+        // Sensor-Fusion or the global reset-on-trigger setting.
+        if (active && !toneHoldWasActive) {
             toneHoldWasActive = true
             when (microphoneTarget) {
                 MicrophoneTarget.TIMER -> {
@@ -383,13 +380,37 @@ fun ClockApp(
                     AppTab.SETTINGS -> Unit
                 }
             }
-        } else if (toneHoldWasActive) {
+        } else if (!active && toneHoldWasActive) {
             toneHoldWasActive = false
             when (microphoneTarget) {
-                MicrophoneTarget.TIMER -> timerRunning = false
-                MicrophoneTarget.STOPWATCH -> stopwatchRunning = false
-                MicrophoneTarget.BOTH -> { timerRunning = false; stopwatchRunning = false }
-                MicrophoneTarget.ACTIVE_WINDOW -> pauseActiveWindowClock()
+                MicrophoneTarget.TIMER -> {
+                    timerRunning = false
+                    if (resetOnSensorTrigger) {
+                        recordTimerResetReading()
+                        remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
+                    }
+                }
+                MicrophoneTarget.STOPWATCH -> {
+                    stopwatchRunning = false
+                    if (resetOnSensorTrigger) {
+                        recordStopwatchResetReading()
+                        stopwatchMillis = 0L
+                    }
+                }
+                MicrophoneTarget.BOTH -> {
+                    timerRunning = false
+                    stopwatchRunning = false
+                    if (resetOnSensorTrigger) {
+                        recordTimerResetReading()
+                        recordStopwatchResetReading()
+                        remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
+                        stopwatchMillis = 0L
+                    }
+                }
+                MicrophoneTarget.ACTIVE_WINDOW -> {
+                    if (resetOnSensorTrigger) triggerActiveWindowClock(reset = true)
+                    else pauseActiveWindowClock()
+                }
             }
         }
     })
