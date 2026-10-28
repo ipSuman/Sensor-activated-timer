@@ -226,12 +226,16 @@ class MicrophoneTapController(
                                             mainHandler.post { if (running) onTripleTap() }
                                         }
                                     }
-                                } else if (rms < threshold * 0.65) {
-                                    if (toneActivityActive) {
-                                        toneActivityActive = false
-                                        mainHandler.post { onToneActivityChanged(false) }
-                                    }
+                                } else if (rms < threshold * 0.65 || (holdWhileToneActive && referenceIntensity > 100.0)) {
+                                    // In reference-matching hold mode, the sound may stop matching
+                                    // while its raw RMS is still above the generic tone threshold.
+                                    // Treat that as a release candidate too, with a short 400 ms
+                                    // grace period to avoid pausing on tiny gaps in music.
                                     if (lastLoudAt != 0L && now - lastLoudAt >= 400L) {
+                                        if (toneActivityActive) {
+                                            toneActivityActive = false
+                                            mainHandler.post { onToneActivityChanged(false) }
+                                        }
                                         toneStartedAt = 0L
                                         toneTriggered = false
                                         lastLoudAt = 0L
