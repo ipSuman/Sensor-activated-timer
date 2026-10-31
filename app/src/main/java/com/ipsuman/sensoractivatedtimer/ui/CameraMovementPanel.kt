@@ -34,19 +34,22 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.abs
 
 @Composable
 internal fun CameraMovementPanel(
     frontCamera: Boolean,
     onToggleCamera: () -> Unit,
-    onMovementDetected: () -> Unit
+    onMovementDetected: () -> Unit,
+    cooldownMs: Long
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val previewView = remember { PreviewView(context).apply { scaleType = PreviewView.ScaleType.FILL_CENTER } }
     var torchEnabled by remember { mutableStateOf(false) }
-    var movementSensitivity by remember { mutableStateOf(18) }
+    var movementSensitivity by remember { mutableStateOf(5) }
+    val sensitivityLevel = remember { AtomicInteger(5) }
     var activeCamera by remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
     DisposableEffect(lifecycleOwner, frontCamera, previewView) {
         val analysisExecutor = Executors.newSingleThreadExecutor()
@@ -72,19 +75,22 @@ internal fun CameraMovementPanel(
                         val previous = previousLuma
                         previousLuma = current
                         if (previous != null && previous.size == current.size) {
-                            val sensitivity = movementSensitivity
+                            val sensitivity = sensitivityLevel.get()
+                            // Non-linear scale: level 1 requires ~30% of samples to change;
+                            // level 10 requires ~3%, giving useful control across the range.
+                            val requiredChangedPercent = (30.0 * Math.pow(0.72, (sensitivity - 1).toDouble())).toInt().coerceAtLeast(3)
                             var changedSamples = 0
                             for (i in current.indices) {
                                 if (abs(current[i] - previous[i]) >= 18) changedSamples++
                             }
                             // Sensitivity is the percentage of the 16x16 sample grid that changed.
                             val changedPercent = changedSamples * 100 / current.size
-                            val frameHasMovement = changedPercent >= sensitivity
+                            val frameHasMovement = changedPercent >= requiredChangedPercent
                             movementWindow.addLast(frameHasMovement)
                             if (frameHasMovement) consecutiveWindowHits++
                             if (movementWindow.size > 5 && movementWindow.removeFirst()) consecutiveWindowHits--
                             val now = SystemClock.elapsedRealtime()
-                            if (movementWindow.size >= 3 && consecutiveWindowHits >= 3 && now - lastMovementAt >= 350L) {
+                            if (movementWindow.size >= 3 && consecutiveWindowHits >= 3 && now - lastMovementAt >= cooldownMs) {
                                 lastMovementAt = now
                                 movementWindow.clear()
                                 consecutiveWindowHits = 0
@@ -128,14 +134,17 @@ internal fun CameraMovementPanel(
                 factory = { previewView },
                 modifier = Modifier.fillMaxWidth().height(150.dp)
             )
-            Text("Movement sensitivity: $movementSensitivity%", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 10.dp))
+            Text("Movement sensitivity: $movementSensitivity / 10", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 10.dp))
             Slider(
                 value = movementSensitivity.toFloat(),
-                onValueChange = { movementSensitivity = it.toInt().coerceIn(2, 100) },
-                valueRange = 2f..100f,
-                steps = 97
+                onValueChange = {
+                    movementSensitivity = it.toInt().coerceIn(1, 10)
+                    sensitivityLevel.set(movementSensitivity)
+                },
+                valueRange = 1f..10f,
+                steps = 8
             )
-            Text("Triggers when at least this percentage of sampled image points change. Temporal filter: movement must be detected in 3 of 5 frames.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Level 1 is least sensitive (about 30% of sampled points must change); level 10 is most sensitive (about 3%). Movement must still be detected in 3 of 5 frames.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Button(
                 onClick = onToggleCamera,
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
