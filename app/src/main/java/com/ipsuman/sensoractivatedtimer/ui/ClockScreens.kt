@@ -147,7 +147,7 @@ internal fun TimerScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(formatTime(remainingSeconds), fontSize = 48.sp, fontWeight = FontWeight.Bold)
-            if (cameraEnabled) CameraMovementPanel(cameraFront, onToggleCamera, onCameraMovement)
+            if (cameraEnabled) CameraMovementPanel(cameraFront, onToggleCamera, onCameraMovement, cooldownMs = 1000L)
             Spacer(Modifier.height(18.dp))
             OutlinedTextField(
                 value = durationInput,
@@ -193,7 +193,7 @@ internal fun StopwatchScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(formatStopwatch(elapsedMillis), fontSize = 38.sp, fontWeight = FontWeight.Bold)
-            if (cameraEnabled) CameraMovementPanel(cameraFront, onToggleCamera, onCameraMovement)
+            if (cameraEnabled) CameraMovementPanel(cameraFront, onToggleCamera, onCameraMovement, cooldownMs = 350L)
             Spacer(Modifier.height(24.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = onToggle) { Text(if (running) "Pause" else "Start") }
