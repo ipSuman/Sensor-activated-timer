@@ -53,6 +53,6 @@ class VolumeGestureAccessibilityService : AccessibilityService() {
     }
 
     companion object {
-        const val ACTION_PAUSE_CLOCK = "com.ipsuman.sensoractivatedtimer.ACTION_PAUSE_CLOCK"
+        const val ACTION_TOGGLE_CLOCK = "com.ipsuman.sensoractivatedtimer.ACTION_TOGGLE_CLOCK"
     }
 }
