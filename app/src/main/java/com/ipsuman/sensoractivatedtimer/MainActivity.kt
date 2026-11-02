@@ -22,10 +22,10 @@ class MainActivity : ComponentActivity() {
     private var volumeGesturePauseHandler: (() -> Unit)? = null
     private val backgroundGestureReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: android.content.Intent?) {
-            if (intent?.action == VolumeGestureAccessibilityService.ACTION_PAUSE_CLOCK) {
+            if (intent?.action == VolumeGestureAccessibilityService.ACTION_TOGGLE_CLOCK) {
                 try {
-                    volumeGesturePauseHandler?.invoke()
-                    CrashLogger.log("Background triple Volume Down gesture requested pause")
+                    volumeGestureHandler?.invoke()
+                    CrashLogger.log("Background triple Volume Down gesture toggled clock")
                 } catch (error: Throwable) {
                     CrashLogger.log("Background volume gesture handler failed", error)
                 }
