@@ -75,7 +75,7 @@ class MainActivity : ComponentActivity() {
             ContextCompat.registerReceiver(
                 this,
                 backgroundGestureReceiver,
-                IntentFilter(VolumeGestureAccessibilityService.ACTION_PAUSE_CLOCK),
+                IntentFilter(VolumeGestureAccessibilityService.ACTION_TOGGLE_CLOCK),
                 ContextCompat.RECEIVER_NOT_EXPORTED
             )
             setContent {
