@@ -106,13 +106,13 @@ object TimerNotificationHelper {
         NotificationManagerCompat.from(context).cancel(STATUS_NOTIFICATION_ID)
     }
 
-    fun showClockStopped(context: Context, clockName: String, timeText: String) {
+    fun showClockStopped(context: Context, clockName: String, timeText: String, reset: Boolean = false) {
         ensureChannel(context)
         if (!hasPermission(context)) return
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle("$clockName paused")
-            .setContentText(if (clockName == "Timer") "Time remaining: $timeText" else "Elapsed time: $timeText")
+            .setContentTitle(if (reset) "$clockName reset" else "$clockName paused")
+            .setContentText(if (reset) "Clock has been reset." else if (clockName == "Timer") "Time remaining: $timeText" else "Elapsed time: $timeText")
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
