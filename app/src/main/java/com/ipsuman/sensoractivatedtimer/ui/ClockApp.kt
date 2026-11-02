@@ -165,29 +165,40 @@ fun ClockApp(
     var notificationsEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("timer_notifications_enabled", false)) }
     var notificationPermissionGranted by remember { mutableStateOf(TimerNotificationHelper.hasPermission(context)) }
 
+    fun notifyActiveClockStopped(clockName: String, reading: String, reset: Boolean) {
+        if (notificationsEnabled && notificationPermissionGranted) {
+            TimerNotificationHelper.showClockStopped(context, clockName, reading, reset)
+        }
+    }
+
     fun triggerActiveWindowClock(reset: Boolean) {
         when (selectedTab) {
             AppTab.TIMER -> {
-                if (reset && timerRunning) {
-                    // Save the latest countdown reading before resetting it.
-                    recordTimerResetReading()
-                    timerRunning = false
-                    remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
-                } else if (timerRunning) {
-                    timerRunning = false
+                if (timerRunning) {
+                    if (reset) {
+                        recordTimerResetReading()
+                        timerRunning = false
+                        remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
+                    } else {
+                        timerRunning = false
+                    }
+                    notifyActiveClockStopped("Timer", formatTime(remainingSeconds), reset)
                 } else {
                     if (remainingSeconds == 0) remainingSeconds = (durationInput.toIntOrNull() ?: 0).coerceIn(1, 24 * 60 * 60)
                     timerRunning = remainingSeconds > 0
                 }
             }
             AppTab.STOPWATCH -> {
-                if (reset && stopwatchRunning) {
-                    // Save the latest elapsed reading before resetting the stopwatch.
-                    recordStopwatchResetReading()
+                if (stopwatchRunning) {
+                    val previousReading = formatStopwatch(stopwatchMillis)
+                    if (reset) {
+                        recordStopwatchResetReading()
+                        stopwatchMillis = 0L
+                    }
                     stopwatchRunning = false
-                    stopwatchMillis = 0L
+                    notifyActiveClockStopped("Stopwatch", if (reset) formatStopwatch(0L) else previousReading, reset)
                 } else {
-                    stopwatchRunning = !stopwatchRunning
+                    stopwatchRunning = true
                 }
             }
             AppTab.SETTINGS -> Unit
@@ -195,8 +206,14 @@ fun ClockApp(
     }
     fun pauseActiveWindowClock() {
         when (selectedTab) {
-            AppTab.TIMER -> timerRunning = false
-            AppTab.STOPWATCH -> stopwatchRunning = false
+            AppTab.TIMER -> if (timerRunning) {
+                timerRunning = false
+                notifyActiveClockStopped("Timer", formatTime(remainingSeconds), false)
+            }
+            AppTab.STOPWATCH -> if (stopwatchRunning) {
+                stopwatchRunning = false
+                notifyActiveClockStopped("Stopwatch", formatStopwatch(stopwatchMillis), false)
+            }
             AppTab.SETTINGS -> Unit
         }
     }
