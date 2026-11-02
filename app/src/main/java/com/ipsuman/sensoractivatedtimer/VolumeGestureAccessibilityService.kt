@@ -44,7 +44,7 @@ class VolumeGestureAccessibilityService : AccessibilityService() {
             if (pressCount >= 3) {
                 pressCount = 0
                 firstPressAt = 0L
-                sendBroadcast(Intent(ACTION_PAUSE_CLOCK).setPackage(packageName))
+                sendBroadcast(Intent(ACTION_TOGGLE_CLOCK).setPackage(packageName))
                 CrashLogger.log("Accessibility service detected triple Volume Down")
             }
             return true
