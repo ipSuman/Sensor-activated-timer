@@ -21,6 +21,7 @@ object TimerNotificationHelper {
     private const val NOTIFICATION_ID = 1001
     private const val TEST_NOTIFICATION_ID = 1002
     private const val STATUS_NOTIFICATION_ID = 1003
+    private const val STOPPED_NOTIFICATION_ID = 1004
     private const val REQUEST_CODE = 701
 
     fun hasPermission(context: Context): Boolean =
@@ -118,7 +119,7 @@ object TimerNotificationHelper {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
         try {
-            NotificationManagerCompat.from(context).notify(STATUS_NOTIFICATION_ID, notification)
+            NotificationManagerCompat.from(context).notify(STOPPED_NOTIFICATION_ID, notification)
         } catch (error: SecurityException) {
             CrashLogger.log("Unable to show stopped clock notification", error)
         }
